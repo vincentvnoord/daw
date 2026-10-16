@@ -31,18 +31,29 @@ fn main() {
 
     let chord = vec![
         SineOsc::new(note_to_freq(Note::C, 4), sr),
-        SineOsc::new(note_to_freq(Note::E, 4), sr),
-        SineOsc::new(note_to_freq(Note::G, 4), sr),
+        // SineOsc::new(note_to_freq(Note::E, 4), sr),
+        // SineOsc::new(note_to_freq(Note::G, 4), sr),
+    ];
+
+    let melody = vec![
+        note_to_freq(Note::C, 4),
+        note_to_freq(Note::D, 4),
+        note_to_freq(Note::E, 4),
+        note_to_freq(Note::F, 4),
+        note_to_freq(Note::G, 4),
+        note_to_freq(Note::G, 4),
+        note_to_freq(Note::E, 4),
+        note_to_freq(Note::C, 4),
     ];
 
     let stream = match sample_format {
-        SampleFormat::F32 => build_stream::<f32>(device, config, chord),
-        SampleFormat::I16 => build_stream::<i16>(device, config, chord),
-        SampleFormat::U16 => build_stream::<u16>(device, config, chord),
+        SampleFormat::F32 => build_stream::<f32>(device, config, chord, melody),
+        SampleFormat::I16 => build_stream::<i16>(device, config, chord, melody),
+        SampleFormat::U16 => build_stream::<u16>(device, config, chord, melody),
         sample_format => panic!("Unsupported sample format '{sample_format}'"),
     }
     .unwrap();
 
     stream.play().unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(3));
+    std::thread::sleep(std::time::Duration::from_secs(10));
 }
