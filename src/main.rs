@@ -1,5 +1,7 @@
+use std::f32::consts::TAU;
+
 use cpal::{
-    Sample, SampleFormat,
+    FromSample, Sample, SampleFormat,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 
@@ -23,19 +25,65 @@ fn main() {
     let sample_format = supported_config.sample_format();
     let config: cpal::StreamConfig = supported_config.into();
 
+    let mut sine = SineOsc::new(440.0, config.sample_rate as f32, config.channels.into());
+
     let stream = match sample_format {
-        SampleFormat::F32 => device.build_output_stream(config, write_silence::<f32>, err_fn, None),
-        SampleFormat::I16 => device.build_output_stream(config, write_silence::<i16>, err_fn, None),
-        SampleFormat::U16 => device.build_output_stream(config, write_silence::<u16>, err_fn, None),
+        SampleFormat::F32 => device.build_output_stream(
+            config,
+            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| sine.write(data),
+            err_fn,
+            None,
+        ),
+        SampleFormat::I16 => device.build_output_stream(
+            config,
+            move |data: &mut [i16], _: &cpal::OutputCallbackInfo| sine.write(data),
+            err_fn,
+            None,
+        ),
+        SampleFormat::U16 => device.build_output_stream(
+            config,
+            move |data: &mut [u16], _: &cpal::OutputCallbackInfo| sine.write(data),
+            err_fn,
+            None,
+        ),
         sample_format => panic!("Unsupported sample format '{sample_format}'"),
     }
     .unwrap();
 
     stream.play().unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(3));
 }
 
-fn write_silence<T: Sample>(data: &mut [T], _: &cpal::OutputCallbackInfo) {
-    for sample in data.iter_mut() {
-        *sample = Sample::EQUILIBRIUM;
+struct SineOsc {
+    frequency: f32,
+    sample_rate: f32,
+    channels: usize,
+    phase: f32,
+}
+
+impl SineOsc {
+    fn new(frequency: f32, sample_rate: f32, channels: usize) -> SineOsc {
+        SineOsc {
+            frequency,
+            sample_rate,
+            channels,
+            phase: 0.0,
+        }
+    }
+
+    fn write<T: Sample + FromSample<f32>>(&mut self, data: &mut [T]) {
+        for frame in data.chunks_mut(self.channels) {
+            let value = (self.phase * TAU).sin() * 0.2;
+
+            for sample in frame.iter_mut() {
+                *sample = T::from_sample(value);
+            }
+
+            self.phase += self.frequency / self.sample_rate;
+
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+            }
+        }
     }
 }
