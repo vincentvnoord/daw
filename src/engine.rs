@@ -1,0 +1,74 @@
+use cpal::{
+    SampleFormat,
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+};
+
+use crate::{
+    output::build_stream,
+    sequence::SequencePlayer,
+    voice::{self, Voice},
+};
+
+pub struct AudioDevice {
+    device: cpal::Device,
+    config: cpal::StreamConfig,
+    sample_format: SampleFormat,
+}
+
+impl AudioDevice {
+    pub fn default() -> AudioDevice {
+        let host = cpal::default_host();
+        println!("{:?}", host.id().name());
+
+        let device = host
+            .default_output_device()
+            .expect("no output device found");
+        println!("{:?}", device);
+
+        let supported_config = device
+            .default_output_config()
+            .expect("no default output config");
+
+        println!("{:?}", supported_config.sample_format());
+
+        let sample_format = supported_config.sample_format();
+        let config: cpal::StreamConfig = supported_config.into();
+
+        AudioDevice {
+            device,
+            config,
+            sample_format,
+        }
+    }
+
+    pub fn sample_rate(&self) -> f32 {
+        self.config.sample_rate as f32
+    }
+
+    pub fn config(&self) -> &cpal::StreamConfig {
+        &self.config
+    }
+
+    pub fn device(&self) -> &cpal::Device {
+        &self.device
+    }
+}
+
+pub struct AudioEngine {
+    stream: cpal::Stream,
+}
+
+impl AudioEngine {
+    pub fn new(device: AudioDevice, player: SequencePlayer, voice: Voice) -> AudioEngine {
+        let stream = match device.sample_format {
+            SampleFormat::F32 => build_stream::<f32>(device, player, voice),
+            SampleFormat::I16 => build_stream::<i16>(device, player, voice),
+            SampleFormat::U16 => build_stream::<u16>(device, player, voice),
+            sample_format => panic!("Unsupported sample format '{sample_format}'"),
+        }
+        .unwrap();
+
+        stream.play().unwrap();
+        AudioEngine { stream }
+    }
+}

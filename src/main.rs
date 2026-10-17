@@ -1,3 +1,4 @@
+mod engine;
 mod envelope;
 mod note;
 mod osc;
@@ -8,36 +9,12 @@ mod voice;
 use std::{thread::sleep, time::Duration};
 
 use crate::{
-    envelope::EnvelopeSettings,
-    osc::{Oscillator, WaveForm},
-    output::build_stream,
-    sequence::{NoteEvent, SequencePlayer},
-    voice::Voice,
-};
-
-use cpal::{
-    SampleFormat,
-    traits::{DeviceTrait, HostTrait, StreamTrait},
+    engine::{AudioDevice, AudioEngine}, envelope::EnvelopeSettings, osc::{Oscillator, WaveForm}, sequence::{NoteEvent, SequencePlayer}, voice::Voice,
 };
 
 fn main() {
-    let host = cpal::default_host();
-    println!("{:?}", host.id().name());
-
-    let device = host
-        .default_output_device()
-        .expect("no output device found");
-    println!("{:?}", device);
-
-    let supported_config = device
-        .default_output_config()
-        .expect("no default output config");
-
-    println!("{:?}", supported_config.sample_format());
-
-    let sample_format = supported_config.sample_format();
-    let config: cpal::StreamConfig = supported_config.into();
-    let sr = config.sample_rate as f32;
+    let device = AudioDevice::default();
+    let sr = device.sample_rate();
 
     let env_settings = EnvelopeSettings {
         attack: 0.005,
@@ -182,17 +159,10 @@ fn main() {
     let osc = Oscillator::new(WaveForm::Square, 440.0, sr);
     let env = envelope::Envelope::new(env_settings, sr);
     let voice = Voice::new(osc, env);
-    let player = SequencePlayer::new(melody, 11.0, sr);
 
-    let stream = match sample_format {
-        SampleFormat::F32 => build_stream::<f32>(device, config, player, voice),
-        SampleFormat::I16 => build_stream::<i16>(device, config, player, voice),
-        SampleFormat::U16 => build_stream::<u16>(device, config, player, voice),
-        sample_format => panic!("Unsupported sample format '{sample_format}'"),
-    }
-    .unwrap();
+    let player = SequencePlayer::new(melody, 10.0, sr);
 
-    stream.play().unwrap();
+    let _engine = AudioEngine::new(device, player, voice);
 
     sleep(Duration::from_secs(10));
 }
