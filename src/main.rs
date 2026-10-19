@@ -1,18 +1,27 @@
-mod engine;
-mod envelope;
-mod note;
-mod osc;
-mod output;
-mod sequence;
-mod voice;
-
-use std::{thread::sleep, time::Duration};
+use rtrb::RingBuffer;
 
 use crate::{
-    engine::{AudioDevice, AudioEngine}, envelope::EnvelopeSettings, osc::{Oscillator, WaveForm}, sequence::{NoteEvent, SequencePlayer}, voice::Voice,
+    audio::{
+        engine::{AudioDevice, AudioEngine},
+        envelope::{self, Envelope, EnvelopeSettings},
+        instrument::{self, Instrument},
+        mixer::Mixer,
+        osc::{Oscillator, WaveForm},
+        sequence::Note,
+        synth::Synth,
+        voice::Voice,
+    },
+    events::NoteEvent,
+    ui::app::App,
 };
 
-fn main() {
+mod audio;
+mod events;
+mod ui;
+
+fn main() -> eframe::Result {
+    let (prod, cons) = RingBuffer::<NoteEvent>::new(256);
+
     let device = AudioDevice::default();
     let sr = device.sample_rate();
 
@@ -22,147 +31,27 @@ fn main() {
         sustain: 1.0,
         release: 0.8,
     };
+    let voices: Vec<Voice> = (0..8)
+        .map(|_| {
+            Voice::new(
+                Oscillator::new(WaveForm::Sine, 440.0, sr),
+                Envelope::new(env_settings, sr),
+            )
+        })
+        .collect();
 
-    let melody = vec![
-        // bar 1
-        NoteEvent {
-            note: 69,
-            start: 0.0,
-            length: 0.4,
-        },
-        NoteEvent {
-            note: 72,
-            start: 0.5,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 76,
-            start: 0.75,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 74,
-            start: 1.0,
-            length: 0.4,
-        },
-        NoteEvent {
-            note: 72,
-            start: 1.5,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 69,
-            start: 1.75,
-            length: 0.2,
-        },
-        // bar 2
-        NoteEvent {
-            note: 67,
-            start: 2.0,
-            length: 0.4,
-        },
-        NoteEvent {
-            note: 69,
-            start: 2.5,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 72,
-            start: 2.75,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 74,
-            start: 3.0,
-            length: 0.9,
-        },
-        // bar 3
-        NoteEvent {
-            note: 69,
-            start: 4.0,
-            length: 0.4,
-        },
-        NoteEvent {
-            note: 72,
-            start: 4.5,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 76,
-            start: 4.75,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 79,
-            start: 5.0,
-            length: 0.4,
-        },
-        NoteEvent {
-            note: 76,
-            start: 5.5,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 74,
-            start: 5.75,
-            length: 0.2,
-        },
-        // bar 4
-        NoteEvent {
-            note: 72,
-            start: 6.0,
-            length: 0.4,
-        },
-        NoteEvent {
-            note: 74,
-            start: 6.5,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 76,
-            start: 6.75,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 69,
-            start: 7.0,
-            length: 0.9,
-        },
-        // bar 5
-        NoteEvent {
-            note: 76,
-            start: 8.0,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 74,
-            start: 8.25,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 72,
-            start: 8.5,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 74,
-            start: 8.75,
-            length: 0.2,
-        },
-        NoteEvent {
-            note: 69,
-            start: 9.0,
-            length: 0.8,
-        },
-    ];
+    let synth = Synth::new(voices);
 
-    let osc = Oscillator::new(WaveForm::Square, 440.0, sr);
-    let env = envelope::Envelope::new(env_settings, sr);
-    let voice = Voice::new(osc, env);
+    let instrument = Instrument::new(cons, synth);
 
-    let player = SequencePlayer::new(melody, 10.0, sr);
+    let mut mixer = Mixer::new(0.2);
+    mixer.add(instrument);
 
-    let _engine = AudioEngine::new(device, player, voice);
+    let _engine = AudioEngine::new(device, mixer);
 
-    sleep(Duration::from_secs(10));
+    eframe::run_native(
+        "DAW",
+        eframe::NativeOptions::default(),
+        Box::new(|_cc| Ok(Box::new(App::new(prod)))),
+    )
 }

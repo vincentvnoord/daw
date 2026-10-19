@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 pub enum State {
     Idle,
     Attack,
@@ -29,6 +30,10 @@ impl Envelope {
             value: 0.0,
             state: State::Idle,
         }
+    }
+
+    pub fn state(&self) -> State {
+        self.state
     }
 
     pub fn trigger(&mut self) {

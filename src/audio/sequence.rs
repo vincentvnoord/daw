@@ -1,21 +1,21 @@
-use crate::voice::Voice;
+use crate::audio::voice::Voice;
 
 #[derive(Clone, Copy)]
-pub struct NoteEvent {
+pub struct Note {
     pub note: u8,
     pub start: f32,
     pub length: f32,
 }
 
 pub struct SequencePlayer {
-    events: Vec<NoteEvent>,
+    events: Vec<Note>,
     position: u32,    // in samples
     loop_length: u32, // in samples
     sample_rate: f32,
 }
 
 impl SequencePlayer {
-    pub fn new(events: Vec<NoteEvent>, loop_seconds: f32, sample_rate: f32) -> SequencePlayer {
+    pub fn new(events: Vec<Note>, loop_seconds: f32, sample_rate: f32) -> SequencePlayer {
         SequencePlayer {
             position: 0,
             events,

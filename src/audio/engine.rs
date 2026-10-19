@@ -4,9 +4,8 @@ use cpal::{
 };
 
 use crate::{
-    output::build_stream,
-    sequence::SequencePlayer,
-    voice::{self, Voice},
+    audio::voice::Voice,
+    audio::{output::build_stream, source::AudioSource},
 };
 
 pub struct AudioDevice {
@@ -59,11 +58,11 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    pub fn new(device: AudioDevice, player: SequencePlayer, voice: Voice) -> AudioEngine {
+    pub fn new<A: AudioSource>(device: AudioDevice, mixer: A) -> AudioEngine {
         let stream = match device.sample_format {
-            SampleFormat::F32 => build_stream::<f32>(device, player, voice),
-            SampleFormat::I16 => build_stream::<i16>(device, player, voice),
-            SampleFormat::U16 => build_stream::<u16>(device, player, voice),
+            SampleFormat::F32 => build_stream::<f32, A>(device, mixer),
+            SampleFormat::I16 => build_stream::<i16, A>(device, mixer),
+            SampleFormat::U16 => build_stream::<u16, A>(device, mixer),
             sample_format => panic!("Unsupported sample format '{sample_format}'"),
         }
         .unwrap();

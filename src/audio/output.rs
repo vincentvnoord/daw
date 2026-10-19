@@ -1,11 +1,11 @@
-use crate::{engine::AudioDevice, sequence::SequencePlayer, voice::Voice};
 
 use cpal::{FromSample, Sample, traits::DeviceTrait};
 
-pub fn build_stream<T>(
+use crate::audio::{engine::AudioDevice, source::AudioSource};
+
+pub fn build_stream<T, A: AudioSource>(
     device: AudioDevice,
-    mut player: SequencePlayer,
-    mut voice: Voice,
+    mut source: A,
 ) -> Result<cpal::Stream, Box<dyn std::error::Error>>
 where
     T: cpal::SizedSample + FromSample<f32>,
@@ -17,10 +17,7 @@ where
     let stream = device.device().build_output_stream(
         *config,
         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            write_frames(data, channels, || {
-                player.tick(&mut voice);
-                voice.next_sample() * 0.2
-            });
+            write_frames(data, channels, || source.next_sample());
         },
         err_fn,
         None,
