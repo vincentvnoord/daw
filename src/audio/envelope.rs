@@ -48,6 +48,10 @@ impl Envelope {
         matches!(self.state, State::Idle)
     }
 
+    pub fn set_settings(&mut self, settings: EnvelopeSettings) {
+        self.settings = settings;
+    }
+
     pub fn next_value(&mut self) -> f32 {
         match self.state {
             State::Idle => {

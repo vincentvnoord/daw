@@ -15,11 +15,15 @@ impl Instrument {
 }
 
 impl AudioSource for Instrument {
-    fn next_sample(&mut self) -> f32 {
+    fn begin_buffer(&mut self) {
         while let Ok(ev) = self.notes.pop() {
             self.synth.handle(ev);
         }
 
+        self.synth.begin_buffer();
+    }
+
+    fn next_sample(&mut self) -> f32 {
         self.synth.next_sample()
     }
 }

@@ -1,17 +1,28 @@
 use crate::{
-    audio::{envelope::State, note::midi_to_freq, osc::Oscillator},
+    audio::{
+        envelope::{EnvelopeSettings, State},
+        filter::LowPassFilter,
+        note::midi_to_freq,
+        osc::{Oscillator, WaveForm},
+    },
     envelope::Envelope,
 };
 
 pub struct Voice {
     osc: Oscillator,
     env: Envelope,
+    filter: LowPassFilter,
     note: u8,
 }
 
 impl Voice {
-    pub fn new(osc: Oscillator, env: Envelope) -> Voice {
-        Voice { osc, env, note: 0 }
+    pub fn new(osc: Oscillator, env: Envelope, filter: LowPassFilter) -> Voice {
+        Voice {
+            osc,
+            env,
+            note: 0,
+            filter,
+        }
     }
 
     pub fn note_on(&mut self, note: u8) {
@@ -27,7 +38,10 @@ impl Voice {
     }
 
     pub fn next_sample(&mut self) -> f32 {
-        self.osc.next_sample() * self.env.next_value()
+        let raw = self.osc.next_sample();
+        let filtered = self.filter.process(raw);
+
+        filtered * self.env.next_value()
     }
 
     pub fn is_idle(&self) -> bool {
@@ -43,5 +57,24 @@ impl Voice {
             self.env.state(),
             State::Attack | State::Decay | State::Sustain
         )
+    }
+
+    pub fn set_waveform(&mut self, waveform: WaveForm) {
+        self.osc.set_waveform(waveform);
+    }
+
+    pub fn set_cutoff(&mut self, cutoff: f32) {
+        self.filter.set_cutoff(cutoff);
+    }
+
+    pub fn set_adsr(&mut self, attack: f32, decay: f32, sustain: f32, release: f32) {
+        let settings = EnvelopeSettings {
+            attack,
+            decay,
+            sustain,
+            release,
+        };
+
+        self.env.set_settings(settings);
     }
 }

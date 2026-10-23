@@ -1,6 +1,45 @@
-use eframe::egui;
+use std::ops::RangeInclusive;
+
+use eframe::egui::{self, Key};
 
 use crate::events::NoteEvent;
+
+/// Notes reachable from the computer keyboard.
+pub const NOTE_RANGE: RangeInclusive<u8> = 48..=76;
+
+const KEYMAP: [(Key, u8); 29] = [
+    // lower octave: bottom row = white keys, home row = black keys
+    (Key::Z, 48), // C3
+    (Key::S, 49), // C#3
+    (Key::X, 50), // D3
+    (Key::D, 51), // D#3
+    (Key::C, 52), // E3
+    (Key::V, 53), // F3
+    (Key::G, 54), // F#3
+    (Key::B, 55), // G3
+    (Key::H, 56), // G#3
+    (Key::N, 57), // A3
+    (Key::J, 58), // A#3
+    (Key::M, 59), // B3
+    // upper octave: letter row = white keys, number row = black keys
+    (Key::Q, 60),    // C4 (middle C)
+    (Key::Num2, 61), // C#4
+    (Key::W, 62),    // D4
+    (Key::Num3, 63), // D#4
+    (Key::E, 64),    // E4
+    (Key::R, 65),    // F4
+    (Key::Num5, 66), // F#4
+    (Key::T, 67),    // G4
+    (Key::Num6, 68), // G#4
+    (Key::Y, 69),    // A4 (440 Hz)
+    (Key::Num7, 70), // A#4
+    (Key::U, 71),    // B4
+    (Key::I, 72),    // C5
+    (Key::Num9, 73), // C#5
+    (Key::O, 74),    // D5
+    (Key::Num0, 75), // D#5
+    (Key::P, 76),    // E5
+];
 
 pub fn key_to_note_event(event: &egui::Event) -> Option<NoteEvent> {
     let egui::Event::Key {
@@ -23,43 +62,10 @@ pub fn key_to_note_event(event: &egui::Event) -> Option<NoteEvent> {
     })
 }
 
-pub fn key_to_note(key: egui::Key) -> Option<u8> {
-    use egui::Key::*;
-    let note = match key {
-        // lower octave: bottom row = white keys, home row = black keys
-        Z => 48, // C3
-        S => 49, // C#3
-        X => 50, // D3
-        D => 51, // D#3
-        C => 52, // E3
-        V => 53, // F3
-        G => 54, // F#3
-        B => 55, // G3
-        H => 56, // G#3
-        N => 57, // A3
-        J => 58, // A#3
-        M => 59, // B3
+pub fn key_to_note(key: Key) -> Option<u8> {
+    KEYMAP.iter().find(|(k, _)| *k == key).map(|(_, n)| *n)
+}
 
-        // upper octave: letter row = white keys, number row = black keys
-        Q => 60,    // C4 (middle C)
-        Num2 => 61, // C#4
-        W => 62,    // D4
-        Num3 => 63, // D#4
-        E => 64,    // E4
-        R => 65,    // F4
-        Num5 => 66, // F#4
-        T => 67,    // G4
-        Num6 => 68, // G#4
-        Y => 69,    // A4 (440 Hz)
-        Num7 => 70, // A#4
-        U => 71,    // B4
-        I => 72,    // C5
-        Num9 => 73, // C#5
-        O => 74,    // D5
-        Num0 => 75, // D#5
-        P => 76,    // E5
-
-        _ => return None,
-    };
-    Some(note)
+pub fn note_to_key(note: u8) -> Option<Key> {
+    KEYMAP.iter().find(|(_, n)| *n == note).map(|(k, _)| *k)
 }

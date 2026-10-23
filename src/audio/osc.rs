@@ -1,9 +1,44 @@
 use std::f32::consts::TAU;
+use std::sync::atomic::{AtomicU8, Ordering};
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WaveForm {
     Sine,
     Saw,
     Square,
+}
+
+impl WaveForm {
+    pub const ALL: [WaveForm; 3] = [WaveForm::Sine, WaveForm::Saw, WaveForm::Square];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            WaveForm::Sine => "Sine",
+            WaveForm::Saw => "Saw",
+            WaveForm::Square => "Square",
+        }
+    }
+}
+
+/// A [`WaveForm`] that can be shared between the UI and audio threads.
+pub struct AtomicWaveForm(AtomicU8);
+
+impl AtomicWaveForm {
+    pub fn new(value: WaveForm) -> Self {
+        Self(AtomicU8::new(value as u8))
+    }
+
+    pub fn get(&self) -> WaveForm {
+        match self.0.load(Ordering::Relaxed) {
+            0 => WaveForm::Sine,
+            1 => WaveForm::Saw,
+            _ => WaveForm::Square,
+        }
+    }
+
+    pub fn set(&self, value: WaveForm) {
+        self.0.store(value as u8, Ordering::Relaxed);
+    }
 }
 
 pub struct Oscillator {
@@ -47,5 +82,9 @@ impl Oscillator {
 
     pub fn set_frequency(&mut self, frequency: f32) {
         self.frequency = frequency;
+    }
+
+    pub fn set_waveform(&mut self, waveform: WaveForm) {
+        self.waveform = waveform;
     }
 }

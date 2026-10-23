@@ -1,4 +1,3 @@
-
 use cpal::{FromSample, Sample, traits::DeviceTrait};
 
 use crate::audio::{engine::AudioDevice, source::AudioSource};
@@ -11,12 +10,13 @@ where
     T: cpal::SizedSample + FromSample<f32>,
 {
     let err_fn = |err| eprintln!("an error occured on the output audio stream: {}", err);
-    let config =  device.config();
+    let config = device.config();
 
     let channels = config.channels as usize;
     let stream = device.device().build_output_stream(
         *config,
         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+            source.begin_buffer();
             write_frames(data, channels, || source.next_sample());
         },
         err_fn,
