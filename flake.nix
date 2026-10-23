@@ -33,8 +33,10 @@
         ];
       in {
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [ rust pkgs.pkg-config ];
-          buildInputs = [ pkgs.alsa-lib ] ++ runtimeLibs;
+          # bindgenHook: libclang for the pipewire crate's bindgen
+          nativeBuildInputs = [ rust pkgs.pkg-config pkgs.rustPlatform.bindgenHook ];
+          # alsa-lib: cpal ALSA host; pipewire: cpal PipeWire host
+          buildInputs = [ pkgs.alsa-lib pkgs.pipewire ] ++ runtimeLibs;
 
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath runtimeLibs;
         };

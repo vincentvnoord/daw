@@ -1,5 +1,5 @@
 use cpal::{
-    SampleFormat,
+    BufferSize, HostId, SampleFormat, SupportedBufferSize,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 
@@ -8,7 +8,16 @@ use crate::{
     audio::{output::build_stream, source::AudioSource},
 };
 
+// Frames per callback, only used for raw ALSA. cpal's ALSA backend allocates
+// two of these, and when ALSA is routed through PipeWire that total must be
+// larger than the graph quantum (1024 by default), otherwise every cycle
+// underruns. Other hosts know their own ideal size, so they keep the default.
+const ALSA_BUFFER_SIZE: u32 = 1024;
+
 pub struct AudioDevice {
+    // Kept alive so the backend (e.g. PipeWire) stays initialised until the
+    // stream is built.
+    _host: cpal::Host,
     device: cpal::Device,
     config: cpal::StreamConfig,
     sample_format: SampleFormat,
@@ -16,6 +25,8 @@ pub struct AudioDevice {
 
 impl AudioDevice {
     pub fn default() -> AudioDevice {
+        // Picks the best backend available: PipeWire, then PulseAudio, then
+        // ALSA on Linux; the native API on other platforms.
         let host = cpal::default_host();
         println!("{:?}", host.id().name());
 
@@ -31,9 +42,19 @@ impl AudioDevice {
         println!("{:?}", supported_config.sample_format());
 
         let sample_format = supported_config.sample_format();
-        let config: cpal::StreamConfig = supported_config.into();
+        let buffer_size = match (host.id(), *supported_config.buffer_size()) {
+            #[cfg(target_os = "linux")]
+            (HostId::Alsa, SupportedBufferSize::Range { min, max }) => {
+                BufferSize::Fixed(ALSA_BUFFER_SIZE.clamp(min, max))
+            }
+            _ => BufferSize::Default,
+        };
+
+        let mut config: cpal::StreamConfig = supported_config.into();
+        config.buffer_size = buffer_size;
 
         AudioDevice {
+            _host: host,
             device,
             config,
             sample_format,
