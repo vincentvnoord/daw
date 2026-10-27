@@ -7,7 +7,8 @@ use crate::{
     shared::AppParams,
     ui::{
         keyboard::{self, key_to_note_event},
-        mixer_panel, synth_panel, theme,
+        mixer_panel::MixerPanel,
+        synth_panel, theme,
         widgets::piano::piano,
     },
 };
@@ -18,6 +19,7 @@ pub struct App {
     held_keys: BTreeSet<u8>,
     /// Note currently played by clicking the on-screen piano.
     mouse_note: Option<u8>,
+    mixer_panel: MixerPanel,
 }
 
 impl App {
@@ -27,6 +29,7 @@ impl App {
             held_keys: BTreeSet::new(),
             mouse_note: None,
             params,
+            mixer_panel: MixerPanel::default(),
         }
     }
 
@@ -114,8 +117,11 @@ impl eframe::App for App {
                 let layout = Layout::left_to_right(Align::Min).with_main_wrap(true);
                 ui.with_layout(layout, |ui| {
                     synth_panel::show(ui, &self.params.synth);
-                    mixer_panel::show(ui, &self.params.mixer);
+                    self.mixer_panel.show(ui, &self.params);
                 });
             });
+
+        // keep redrawing so the meters move without mouse input
+        ui.ctx().request_repaint();
     }
 }

@@ -7,7 +7,7 @@ use crate::{
     audio::{
         dsp::filter::LowPassFilter,
         engine::{AudioDevice, AudioEngine},
-        instrument::{Instrument, InstrumentSource},
+        instrument::InstrumentSource,
         mixer::{
             Mixer, MixerParams,
             channel::{Channel, ChannelParams},
@@ -78,11 +78,12 @@ fn main() -> eframe::Result {
         meter: Meter::new(),
     });
 
-    let mut channel0 = Channel::new(channel_params);
+    let mut channel0 = Channel::new(Arc::clone(&channel_params));
     channel0.add(instrument_source);
 
     let mixer_params = Arc::new(MixerParams {
         gain: AtomicF32::new(0.2),
+        meter: Meter::new(),
     });
     let mut mixer = Mixer::new(Arc::clone(&mixer_params));
     mixer.add(channel0);
@@ -92,6 +93,7 @@ fn main() -> eframe::Result {
     let params = AppParams {
         synth: Arc::clone(&synth_params),
         mixer: Arc::clone(&mixer_params),
+        channels: vec![("Kick".to_owned(), channel_params)],
     };
 
     let options = eframe::NativeOptions {

@@ -10,6 +10,8 @@ pub const TEXT: Color32 = Color32::from_rgb(226, 226, 232);
 pub const TEXT_DIM: Color32 = Color32::from_rgb(134, 134, 146);
 pub const ACCENT: Color32 = Color32::from_rgb(232, 98, 52);
 pub const ACCENT_DIM: Color32 = Color32::from_rgb(120, 56, 34);
+pub const METER: Color32 = Color32::from_rgb(96, 196, 124);
+pub const CLIP: Color32 = Color32::from_rgb(228, 64, 64);
 
 // Shape
 pub const RADIUS: u8 = 6;

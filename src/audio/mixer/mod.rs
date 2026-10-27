@@ -4,18 +4,23 @@ pub mod channel;
 pub mod meter;
 
 use crate::{
-    audio::{mixer::channel::Channel, source::AudioSource},
+    audio::{
+        mixer::{channel::Channel, meter::Meter},
+        source::AudioSource,
+    },
     helpers::AtomicF32,
 };
 
 pub struct MixerParams {
     pub gain: AtomicF32,
+    pub meter: Meter,
 }
 
 pub struct Mixer {
     channels: Vec<Channel>,
     params: Arc<MixerParams>,
     gain: f32,
+    peak: f32,
 }
 
 impl Mixer {
@@ -25,6 +30,7 @@ impl Mixer {
             channels: Vec::new(),
             params,
             gain,
+            peak: 0.0,
         }
     }
 
@@ -35,6 +41,9 @@ impl Mixer {
 
 impl AudioSource for Mixer {
     fn begin_buffer(&mut self) {
+        self.params.meter.record(self.peak);
+        self.peak = 0.0;
+
         self.gain = self.params.gain.get();
         for channel in &mut self.channels {
             channel.begin_buffer();
@@ -43,6 +52,9 @@ impl AudioSource for Mixer {
 
     fn next_sample(&mut self) -> f32 {
         let sum: f32 = self.channels.iter_mut().map(|s| s.next_sample()).sum();
-        sum * self.gain
+        let out = sum * self.gain;
+        self.peak = self.peak.max(out.abs());
+
+        out
     }
 }
