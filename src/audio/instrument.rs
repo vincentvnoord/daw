@@ -1,29 +1,37 @@
 use rtrb::Consumer;
 
-use crate::audio::{source::AudioSource, synth::Synth};
+use crate::audio::source::AudioSource;
 use crate::events::NoteEvent;
 
-pub struct Instrument {
-    notes: Consumer<NoteEvent>,
-    synth: Synth,
+pub trait Instrument: AudioSource {
+    fn note_on(&mut self, note: u8);
+    fn note_off(&mut self, note: u8);
 }
 
-impl Instrument {
-    pub fn new(notes: Consumer<NoteEvent>, synth: Synth) -> Self {
-        Self { notes, synth }
+pub struct Channel<I: Instrument> {
+    notes: Consumer<NoteEvent>,
+    instrument: I,
+}
+
+impl<I: Instrument> Channel<I> {
+    pub fn new(notes: Consumer<NoteEvent>, instrument: I) -> Self {
+        Self { notes, instrument }
     }
 }
 
-impl AudioSource for Instrument {
+impl<I: Instrument> AudioSource for Channel<I> {
     fn begin_buffer(&mut self) {
         while let Ok(ev) = self.notes.pop() {
-            self.synth.handle(ev);
+            match ev {
+                NoteEvent::On(note) => self.instrument.note_on(note),
+                NoteEvent::Off(note) => self.instrument.note_off(note),
+            }
         }
 
-        self.synth.begin_buffer();
+        self.instrument.begin_buffer();
     }
 
     fn next_sample(&mut self) -> f32 {
-        self.synth.next_sample()
+        self.instrument.next_sample()
     }
 }

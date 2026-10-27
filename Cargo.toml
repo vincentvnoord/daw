@@ -6,7 +6,9 @@ edition = "2024"
 [dependencies]
 cpal = "0.18.2"
 eframe = "0.37.0"
+hound = "3.5.1"
 rtrb = "0.4.0"
+rubato = "5.0.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 cpal = { version = "0.18.2", features = ["pipewire", "pulseaudio"] }

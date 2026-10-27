@@ -1,4 +1,4 @@
-use std::sync::{Arc, atomic::AtomicU32};
+use std::{path::Path, sync::Arc};
 
 use eframe::egui;
 use rtrb::RingBuffer;
@@ -8,10 +8,11 @@ use crate::{
         engine::{AudioDevice, AudioEngine},
         envelope::{self, Envelope, EnvelopeSettings},
         filter::LowPassFilter,
-        instrument::{self, Instrument},
+        instrument::{Channel, Instrument},
         mixer::{Mixer, MixerParams},
         osc::{AtomicWaveForm, Oscillator, WaveForm},
-        sequence::Note,
+        sample::Sample,
+        sampler::Sampler,
         synth::{Synth, SynthParams},
         voice::Voice,
     },
@@ -59,15 +60,19 @@ fn main() -> eframe::Result {
         release: AtomicF32::new(env_settings.release),
     });
 
-    let synth = Synth::new(voices, Arc::clone(&synth_params));
+    let _ = Synth::new(voices, Arc::clone(&synth_params));
 
-    let instrument = Instrument::new(cons, synth);
+    let sample = Sample::load(Path::new("testsamples/kick_16bit_stereo_44k.wav"), sr)
+        .expect("failed to load sample");
+    let sampler = Sampler::new(sample.data, 8);
+
+    let channel = Channel::new(cons, sampler);
 
     let mixer_params = Arc::new(MixerParams {
         gain: AtomicF32::new(0.2),
     });
     let mut mixer = Mixer::new(Arc::clone(&mixer_params));
-    mixer.add(instrument);
+    mixer.add(channel);
 
     let _engine = AudioEngine::new(device, mixer);
 

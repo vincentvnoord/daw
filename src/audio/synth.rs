@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use crate::audio::instrument::Instrument;
 use crate::audio::{osc::AtomicWaveForm, source::AudioSource, voice::Voice};
-use crate::events::NoteEvent;
 use crate::helpers::AtomicF32;
 
 pub struct SynthParams {
@@ -28,24 +28,6 @@ impl Synth {
             ages: vec![0; n],
             voices,
             params,
-        }
-    }
-
-    pub fn handle(&mut self, event: NoteEvent) {
-        match event {
-            NoteEvent::On(note) => {
-                let i = self.find_voice_for(note);
-                self.clock += 1;
-                self.ages[i] = self.clock;
-                self.voices[i].note_on(note);
-            }
-            NoteEvent::Off(note) => {
-                for v in &mut self.voices {
-                    if v.is_held() && v.note() == note {
-                        v.note_off();
-                    }
-                }
-            }
         }
     }
 
@@ -90,5 +72,22 @@ impl AudioSource for Synth {
 
     fn next_sample(&mut self) -> f32 {
         self.voices.iter_mut().map(|v| v.next_sample()).sum()
+    }
+}
+
+impl Instrument for Synth {
+    fn note_on(&mut self, note: u8) {
+        let i = self.find_voice_for(note);
+        self.clock += 1;
+        self.ages[i] = self.clock;
+        self.voices[i].note_on(note);
+    }
+
+    fn note_off(&mut self, note: u8) {
+        for v in &mut self.voices {
+            if v.is_held() && v.note() == note {
+                v.note_off();
+            }
+        }
     }
 }

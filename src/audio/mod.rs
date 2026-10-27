@@ -10,3 +10,5 @@ pub mod sequence;
 pub mod source;
 pub mod synth;
 pub mod voice;
+pub mod sample;
+pub mod sampler;
