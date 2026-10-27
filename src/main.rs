@@ -7,8 +7,12 @@ use crate::{
     audio::{
         dsp::filter::LowPassFilter,
         engine::{AudioDevice, AudioEngine},
-        instrument::{Channel, Instrument},
-        mixer::{Mixer, MixerParams},
+        instrument::{Instrument, InstrumentSource},
+        mixer::{
+            Mixer, MixerParams,
+            channel::{Channel, ChannelParams},
+            meter::Meter,
+        },
         sampler::{Sampler, sample::Sample},
         synth::{
             Synth, SynthParams,
@@ -67,13 +71,21 @@ fn main() -> eframe::Result {
         .expect("failed to load sample");
     let sampler = Sampler::new(sample.data, 8);
 
-    let channel = Channel::new(cons, sampler);
+    let instrument_source = InstrumentSource::new(cons, sampler);
+
+    let channel_params = Arc::new(ChannelParams {
+        gain: AtomicF32::new(0.2),
+        meter: Meter::new(),
+    });
+
+    let mut channel0 = Channel::new(channel_params);
+    channel0.add(instrument_source);
 
     let mixer_params = Arc::new(MixerParams {
         gain: AtomicF32::new(0.2),
     });
     let mut mixer = Mixer::new(Arc::clone(&mixer_params));
-    mixer.add(channel);
+    mixer.add(channel0);
 
     let _engine = AudioEngine::new(device, mixer);
 

@@ -35,7 +35,7 @@ impl Sample {
             sample_rate: spec.sample_rate as f64,
         };
 
-        sample.resample_to(sample_rate);
+        sample.resample_to(sample_rate)?;
 
         Ok(sample)
     }

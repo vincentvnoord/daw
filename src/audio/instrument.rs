@@ -8,18 +8,18 @@ pub trait Instrument: AudioSource {
     fn note_off(&mut self, note: u8);
 }
 
-pub struct Channel<I: Instrument> {
+pub struct InstrumentSource<I: Instrument> {
     notes: Consumer<NoteEvent>,
     instrument: I,
 }
 
-impl<I: Instrument> Channel<I> {
+impl<I: Instrument> InstrumentSource<I> {
     pub fn new(notes: Consumer<NoteEvent>, instrument: I) -> Self {
         Self { notes, instrument }
     }
 }
 
-impl<I: Instrument> AudioSource for Channel<I> {
+impl<I: Instrument> AudioSource for InstrumentSource<I> {
     fn begin_buffer(&mut self) {
         while let Ok(ev) = self.notes.pop() {
             match ev {
