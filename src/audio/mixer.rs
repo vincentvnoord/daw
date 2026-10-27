@@ -37,6 +37,6 @@ impl AudioSource for Mixer {
 
     fn next_sample(&mut self) -> f32 {
         let sum: f32 = self.inputs.iter_mut().map(|s| s.next_sample()).sum();
-        sum * self.params.gain.get()
+        sum * self.gain
     }
 }
