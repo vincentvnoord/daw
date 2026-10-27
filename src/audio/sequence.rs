@@ -1,4 +1,4 @@
-use crate::audio::voice::Voice;
+use crate::audio::synth::voice::Voice;
 
 #[derive(Clone, Copy)]
 pub struct Note {

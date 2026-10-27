@@ -1,7 +1,14 @@
 use std::sync::Arc;
 
+pub mod envelope;
+pub mod osc;
+pub mod voice;
+
 use crate::audio::instrument::Instrument;
-use crate::audio::{osc::AtomicWaveForm, source::AudioSource, voice::Voice};
+
+use crate::audio::source::AudioSource;
+use crate::audio::synth::osc::AtomicWaveForm;
+use crate::audio::synth::voice::Voice;
 use crate::helpers::AtomicF32;
 
 pub struct SynthParams {

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+pub mod sample;
+
 use crate::audio::{instrument::Instrument, source::AudioSource};
 
 pub struct Sampler {

@@ -4,8 +4,10 @@ use eframe::egui::{
     self, Align2, CornerRadius, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, pos2, vec2,
 };
 
-use crate::audio::osc::{AtomicWaveForm, WaveForm};
-use crate::ui::theme;
+use crate::{
+    audio::synth::osc::{AtomicWaveForm, WaveForm},
+    ui::theme,
+};
 
 const ROW: egui::Vec2 = vec2(96.0, 26.0);
 const ICON_W: f32 = 26.0;

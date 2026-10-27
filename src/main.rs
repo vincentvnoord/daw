@@ -5,16 +5,17 @@ use rtrb::RingBuffer;
 
 use crate::{
     audio::{
+        dsp::filter::LowPassFilter,
         engine::{AudioDevice, AudioEngine},
-        envelope::{self, Envelope, EnvelopeSettings},
-        filter::LowPassFilter,
         instrument::{Channel, Instrument},
         mixer::{Mixer, MixerParams},
-        osc::{AtomicWaveForm, Oscillator, WaveForm},
-        sample::Sample,
-        sampler::Sampler,
-        synth::{Synth, SynthParams},
-        voice::Voice,
+        sampler::{Sampler, sample::Sample},
+        synth::{
+            Synth, SynthParams,
+            envelope::{Envelope, EnvelopeSettings},
+            osc::{AtomicWaveForm, Oscillator, WaveForm},
+            voice::Voice,
+        },
     },
     events::NoteEvent,
     helpers::AtomicF32,

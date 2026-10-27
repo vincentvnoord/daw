@@ -1,11 +1,10 @@
-use crate::{
-    audio::{
-        envelope::{EnvelopeSettings, State},
-        filter::LowPassFilter,
-        note::midi_to_freq,
+use crate::audio::{
+    dsp::filter::LowPassFilter,
+    note::midi_to_freq,
+    synth::{
+        envelope::{Envelope, EnvelopeSettings, State},
         osc::{Oscillator, WaveForm},
     },
-    envelope::Envelope,
 };
 
 pub struct Voice {

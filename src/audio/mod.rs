@@ -1,14 +1,10 @@
+pub mod dsp;
 pub mod engine;
-pub mod envelope;
-pub mod filter;
 pub mod instrument;
 pub mod mixer;
 pub mod note;
-pub mod osc;
 pub mod output;
+pub mod sampler;
 pub mod sequence;
 pub mod source;
 pub mod synth;
-pub mod voice;
-pub mod sample;
-pub mod sampler;
