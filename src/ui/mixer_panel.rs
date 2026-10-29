@@ -6,7 +6,7 @@ use crate::{
     shared::AppParams,
     ui::{
         theme,
-        widgets::{fader::Fader, meter::Meter, value::Unit},
+        widgets::{fader::Fader, knob::Knob, meter::Meter, value::Unit},
     },
 };
 
@@ -47,7 +47,8 @@ impl MixerPanel {
                             params.channels.iter().zip(&mut self.levels).enumerate()
                         {
                             *level = next_level(&channel.params.meter, *level, fall);
-                            if strip(ui, &channel.name, &channel.params.gain, *level, true) {
+                            let params = &channel.params;
+                            if strip(ui, &channel.name, &params.gain, Some(&params.pan), *level) {
                                 remove_channel = Some((i, channel.id()));
                             }
                         }
@@ -76,7 +77,7 @@ impl MixerPanel {
                 }
 
                 ui.vertical(|ui| {
-                    strip(ui, "Master", &params.mixer.gain, self.master_level, false);
+                    strip(ui, "Master", &params.mixer.gain, None, self.master_level);
 
                     let clip = egui::Button::new(
                         RichText::new("CLIP")
@@ -106,12 +107,25 @@ fn next_level(meter: &meter::Meter, level: f32, fall: f32) -> f32 {
     meter.take().max(level * fall)
 }
 
-/// Draws one channel strip. Returns `true` when its remove button was clicked.
-fn strip(ui: &mut egui::Ui, name: &str, gain: &AtomicF32, level: f32, removable: bool) -> bool {
+/// Draws one channel strip. Channel strips get a pan knob and a remove
+/// button; the master (`pan` is `None`) gets neither. Returns `true` when
+/// the remove button was clicked.
+fn strip(
+    ui: &mut egui::Ui,
+    name: &str,
+    gain: &AtomicF32,
+    pan: Option<&AtomicF32>,
+    level: f32,
+) -> bool {
     let mut removed = false;
+    let removable = pan.is_some();
 
     theme::card_frame().show(ui, |ui| {
         ui.vertical(|ui| {
+            if let Some(pan) = pan {
+                ui.add(Knob::new(pan, -1.0..=1.0, "Pan", Unit::Pan).bipolar(true));
+            }
+
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 ui.add(Fader::new(gain, 0.0..=MAX_GAIN, name, Unit::Decibels).height(STRIP_HEIGHT));

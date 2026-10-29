@@ -1,6 +1,9 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU32, Ordering},
+use std::{
+    f32::consts::PI,
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
 };
 
 use crate::{
@@ -8,8 +11,9 @@ use crate::{
     helpers::AtomicF32,
 };
 
-/// Gain a new channel starts with.
+/// Gain and pan a new channel starts with.
 pub const DEFAULT_GAIN: f32 = 0.5;
+pub const DEFAULT_PAN: f32 = 0.0;
 
 /// Identifies a channel for as long as it exists, wherever it sits in the
 /// mixer. Instruments route by id, so removing a channel never shifts other
@@ -37,12 +41,15 @@ pub struct ChannelParams {
     pub id: ChannelId,
     pub gain: AtomicF32,
     pub meter: Meter,
+    pub pan: AtomicF32,
 }
 
 pub struct Channel {
     input: f32,
     params: Arc<ChannelParams>,
     gain: f32,
+    pan_l: f32,
+    pan_r: f32,
     peak: f32,
 }
 
@@ -53,6 +60,7 @@ impl Channel {
             id: ChannelId::next(),
             gain: AtomicF32::new(gain),
             meter: Meter::new(),
+            pan: AtomicF32::new(DEFAULT_PAN),
         });
 
         (Self::new(Arc::clone(&params)), params)
@@ -60,11 +68,14 @@ impl Channel {
 
     pub fn new(params: Arc<ChannelParams>) -> Self {
         let gain = params.gain.get();
+        let (pan_l, pan_r) = Self::pan_gains(params.pan.get());
         Channel {
             input: 0.0,
             params,
             gain,
             peak: 0.0,
+            pan_l,
+            pan_r,
         }
     }
 
@@ -81,16 +92,60 @@ impl Channel {
         self.peak = 0.0;
 
         self.gain = self.params.gain.get();
+
+        let pan = self.params.pan.get();
+        let (pan_l, pan_r) = Self::pan_gains(pan);
+        self.pan_l = pan_l;
+        self.pan_r = pan_r;
     }
 
     pub fn process(&mut self) -> Frame {
-        let out = self.input * self.gain;
-        self.input = 0.0;
-        self.peak = self.peak.max(out.abs());
+        let mono = self.input * self.gain;
 
-        Frame {
-            left: out,
-            right: out,
+        let frame = Frame {
+            left: mono * self.pan_l,
+            right: mono * self.pan_r,
+        };
+
+        self.input = 0.0;
+        self.peak = self.peak.max(frame.left.abs().max(frame.right.abs()));
+
+        frame
+    }
+
+    fn pan_gains(pan: f32) -> (f32, f32) {
+        let out = (pan + 1.0) * PI / 4.0;
+        (out.cos(), out.sin())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f32::consts::FRAC_1_SQRT_2;
+
+    use super::*;
+
+    fn close(a: f32, b: f32) -> bool {
+        (a - b).abs() < 1e-6
+    }
+
+    #[test]
+    fn centre_is_minus_3db_and_extremes_are_one_sided() {
+        let (l, r) = Channel::pan_gains(0.0);
+        assert!(close(l, FRAC_1_SQRT_2) && close(r, FRAC_1_SQRT_2));
+
+        let (l, r) = Channel::pan_gains(-1.0);
+        assert!(close(l, 1.0) && close(r, 0.0));
+
+        let (l, r) = Channel::pan_gains(1.0);
+        assert!(close(l, 0.0) && close(r, 1.0));
+    }
+
+    #[test]
+    fn power_stays_constant_across_the_sweep() {
+        for pan in [-1.0, -0.6, -0.25, 0.0, 0.3, 0.75, 1.0] {
+            let (l, r) = Channel::pan_gains(pan);
+            assert!(close(l * l + r * r, 1.0), "pan {pan}: {}", l * l + r * r);
         }
     }
 }

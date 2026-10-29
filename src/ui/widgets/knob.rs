@@ -21,6 +21,7 @@ pub struct Knob<'a> {
     param: &'a AtomicF32,
     range: RangeInclusive<f32>,
     log: bool,
+    bipolar: bool,
     label: &'a str,
     unit: Unit,
 }
@@ -36,6 +37,7 @@ impl<'a> Knob<'a> {
             param,
             range,
             log: false,
+            bipolar: false,
             label,
             unit,
         }
@@ -43,6 +45,13 @@ impl<'a> Knob<'a> {
 
     pub fn logarithmic(mut self, log: bool) -> Self {
         self.log = log;
+        self
+    }
+
+    /// Fills the arc out from the top instead of from the start, for
+    /// parameters like pan where the middle is the neutral position.
+    pub fn bipolar(mut self, bipolar: bool) -> Self {
+        self.bipolar = bipolar;
         self
     }
 }
@@ -90,11 +99,16 @@ impl egui::Widget for Knob<'_> {
                 SWEEP,
                 Stroke::new(4.0, theme::BG),
             ));
+            let (fill_start, fill_sweep) = if self.bipolar {
+                (START_ANGLE + SWEEP * 0.5, SWEEP * (t - 0.5))
+            } else {
+                (START_ANGLE, SWEEP * t)
+            };
             painter.add(arc(
                 center,
                 track_r,
-                START_ANGLE,
-                SWEEP * t,
+                fill_start,
+                fill_sweep,
                 Stroke::new(4.0, theme::ACCENT),
             ));
 

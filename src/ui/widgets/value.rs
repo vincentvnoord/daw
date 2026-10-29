@@ -7,6 +7,8 @@ pub enum Unit {
     Seconds,
     Percent,
     Decibels,
+    /// -1 is hard left, +1 hard right.
+    Pan,
 }
 
 impl Unit {
@@ -19,6 +21,11 @@ impl Unit {
             Unit::Percent => format!("{:.0}%", v * 100.0),
             Unit::Decibels if v <= 0.0 => "-inf dB".to_owned(),
             Unit::Decibels => format!("{:.1} dB", 20.0 * v.log10()),
+            Unit::Pan => match (v * 100.0).round() as i32 {
+                0 => "C".to_owned(),
+                p if p < 0 => format!("L{}", -p),
+                p => format!("R{p}"),
+            },
         }
     }
 }
