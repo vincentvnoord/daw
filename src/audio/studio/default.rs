@@ -72,6 +72,7 @@ pub fn default_studio(sample_rate: f32) -> (Studio, AppParams) {
                 params: kick_params,
             },
         ],
+        inputs: Vec::new(),
         commands,
         garbage,
     };

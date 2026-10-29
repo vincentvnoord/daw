@@ -1,44 +1,27 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU32, Ordering},
-};
+use std::sync::Arc;
 
 use rtrb::{Producer, RingBuffer};
 
 use crate::{
     audio::{
         instrument::{Instrument, InstrumentSource},
-        mixer::channel::ChannelId,
+        mixer::channel::{ChannelId, ChannelRoute},
         source::AudioSource,
     },
     events::NoteEvent,
 };
 
-const NO_CHANNEL: u32 = u32::MAX;
-
 /// How many note events can wait for the audio thread per instrument.
 const NOTE_QUEUE_SIZE: usize = 256;
 
 pub struct InstrumentParams {
-    output_channel: AtomicU32,
+    pub route: ChannelRoute,
 }
 
 impl InstrumentParams {
     pub fn new(channel: Option<ChannelId>) -> Self {
         Self {
-            output_channel: AtomicU32::new(channel.map_or(NO_CHANNEL, ChannelId::to_raw)),
-        }
-    }
-
-    pub fn set_channel(&self, channel: Option<ChannelId>) {
-        self.output_channel
-            .store(channel.map_or(NO_CHANNEL, ChannelId::to_raw), Ordering::Relaxed);
-    }
-
-    pub fn get_channel(&self) -> Option<ChannelId> {
-        match self.output_channel.load(Ordering::Relaxed) {
-            NO_CHANNEL => None,
-            raw => Some(ChannelId::from_raw(raw)),
+            route: ChannelRoute::new(channel),
         }
     }
 }

@@ -7,6 +7,7 @@ use crate::{
     shared::AppParams,
     ui::{
         editor_panel,
+        input_panel::InputPanel,
         instrument_panel::{self, InstrumentAction},
         keyboard::{self, key_to_note_event},
         mixer_panel::MixerPanel,
@@ -14,6 +15,9 @@ use crate::{
         widgets::piano::piano,
     },
 };
+
+/// Width of the column with the instrument and input lists.
+const LIST_WIDTH: f32 = 200.0;
 
 pub struct App {
     params: AppParams,
@@ -23,6 +27,7 @@ pub struct App {
     /// Note currently played by clicking the on-screen piano.
     mouse_note: Option<u8>,
     mixer_panel: MixerPanel,
+    input_panel: InputPanel,
 }
 
 impl App {
@@ -33,6 +38,7 @@ impl App {
             held_keys: BTreeSet::new(),
             mouse_note: None,
             mixer_panel: MixerPanel::default(),
+            input_panel: InputPanel::default(),
         }
     }
 
@@ -159,15 +165,29 @@ impl eframe::App for App {
             .show(ui, |ui| self.mixer_panel.show(ui, &mut self.params));
 
         let mut instrument_action = None;
+        let mut new_input = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(16))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
                 ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
-                    instrument_action = instrument_panel::show(ui, &self.params, self.active);
+                    ui.vertical(|ui| {
+                        ui.set_width(LIST_WIDTH);
+                        instrument_action = instrument_panel::show(ui, &self.params, self.active);
+                        ui.add_space(theme::GAP);
+                        new_input = self.input_panel.show(ui, &self.params);
+                    });
                     editor_panel::show(ui, &mut self.params, self.active);
                 });
             });
+
+        if let Some(device) = new_input {
+            match self.params.add_input(&device) {
+                Ok(Some(_)) => {}
+                Ok(None) => eprintln!("can't add more inputs"),
+                Err(err) => eprintln!("failed to open {}: {err}", device.name),
+            }
+        }
 
         // handled after drawing, so the file dialog doesn't open mid-frame
         match instrument_action {

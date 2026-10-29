@@ -37,12 +37,12 @@ pub fn show(ui: &mut egui::Ui, params: &mut AppParams, active: usize) {
         });
 
     match choice {
-        Some(OutputChoice::Channel(id)) => params.instruments[active].params.set_channel(id),
+        Some(OutputChoice::Channel(id)) => params.instruments[active].params.route.set_channel(id),
         Some(OutputChoice::NewChannel) => {
             // name the channel after the instrument that asked for it
             let name = params.instruments[active].name.clone();
             if let Some(id) = params.add_channel(name) {
-                params.instruments[active].params.set_channel(Some(id));
+                params.instruments[active].params.route.set_channel(Some(id));
             }
         }
         None => {}
@@ -66,7 +66,7 @@ fn header(
         }
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let current = instrument.params.get_channel();
+            let current = instrument.params.route.get_channel();
             let current_name = current
                 .and_then(|id| params.channel(id))
                 .map_or("No output", |c| c.name.as_str());

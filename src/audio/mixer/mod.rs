@@ -6,7 +6,7 @@ pub mod meter;
 use crate::{
     audio::{
         mixer::{
-            channel::{Channel, ChannelId},
+            channel::{Channel, ChannelId, ChannelRoute},
             meter::Meter,
         },
         source::AudioSource,
@@ -68,6 +68,10 @@ impl Mixer {
         if let Some(ch) = self.channels.get_mut(channel_idx) {
             ch.add_input(input);
         }
+    }
+
+    pub fn resolve(&self, route: &ChannelRoute) -> Option<usize> {
+        route.get_channel().and_then(|id| self.index_of(id))
     }
 }
 

@@ -1,3 +1,4 @@
+pub mod capture;
 pub mod dsp;
 pub mod engine;
 pub mod instrument;

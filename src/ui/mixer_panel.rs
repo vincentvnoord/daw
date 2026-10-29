@@ -13,6 +13,9 @@ use crate::{
 const STRIP_HEIGHT: f32 = 120.0;
 /// Room kept free on the right for the master strip.
 const MASTER_WIDTH: f32 = 110.0;
+/// Top of every fader: +6 dB. Unity sits halfway up, so there's room to
+/// boost a quiet channel as well as cut a loud one.
+const MAX_GAIN: f32 = 2.0;
 /// How fast a meter falls back after a peak.
 const FALL_DB_PER_SEC: f32 = 20.0;
 
@@ -111,7 +114,7 @@ fn strip(ui: &mut egui::Ui, name: &str, gain: &AtomicF32, level: f32, removable:
         ui.vertical(|ui| {
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                ui.add(Fader::new(gain, 0.0..=1.0, name, Unit::Decibels).height(STRIP_HEIGHT));
+                ui.add(Fader::new(gain, 0.0..=MAX_GAIN, name, Unit::Decibels).height(STRIP_HEIGHT));
                 ui.add(Meter::new(level).height(STRIP_HEIGHT));
             });
 

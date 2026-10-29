@@ -1,5 +1,6 @@
 pub mod app;
 mod editor_panel;
+mod input_panel;
 mod instrument_panel;
 mod keyboard;
 mod mixer_panel;

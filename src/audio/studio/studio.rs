@@ -10,21 +10,26 @@ use crate::{
             channel::{Channel, ChannelId, ChannelParams},
         },
         source::AudioSource,
-        studio::instrument::{InstrumentParams, InstrumentSlot},
+        studio::{
+            input::InputSlot,
+            instrument::{InstrumentParams, InstrumentSlot},
+        },
     },
     events::NoteEvent,
 };
 
-/// Most instruments the studio can hold. Space for all of them is reserved
-/// up front, so adding one while audio runs never allocates on the audio
-/// thread.
+/// Most instruments and inputs the studio can hold. Space for all of them is
+/// reserved up front, so adding one while audio runs never allocates on the
+/// audio thread.
 pub const MAX_INSTRUMENTS: usize = 64;
+pub const MAX_INPUTS: usize = 32;
 
 /// Changes the UI asks the studio to make while the audio is running.
 pub enum StudioCommand {
     AddChannel(Channel),
     RemoveChannel(ChannelId),
     AddInstrument(InstrumentSlot),
+    AddInput(InputSlot),
 }
 
 /// Things the studio no longer uses. They go back to the UI thread to be
@@ -33,10 +38,12 @@ pub enum StudioCommand {
 pub enum Garbage {
     Channel(Channel),
     Instrument(InstrumentSlot),
+    Input(InputSlot),
 }
 
 pub struct Studio {
     instruments: Vec<InstrumentSlot>,
+    inputs: Vec<InputSlot>,
     mixer: Mixer,
     commands: Consumer<StudioCommand>,
     garbage: Producer<Garbage>,
@@ -50,6 +57,7 @@ impl Studio {
     ) -> Self {
         Self {
             instruments: Vec::with_capacity(MAX_INSTRUMENTS),
+            inputs: Vec::with_capacity(MAX_INPUTS),
             mixer: Mixer::new(mixer_params),
             commands,
             garbage,
@@ -100,6 +108,13 @@ impl Studio {
                         self.discard(Garbage::Instrument(slot));
                     }
                 }
+                StudioCommand::AddInput(slot) => {
+                    if self.inputs.len() < MAX_INPUTS {
+                        self.inputs.push(slot);
+                    } else {
+                        self.discard(Garbage::Input(slot));
+                    }
+                }
             }
         }
     }
@@ -116,11 +131,13 @@ impl AudioSource for Studio {
         self.handle_commands();
 
         for slot in &mut self.instruments {
-            slot.output = slot
-                .params
-                .get_channel()
-                .and_then(|id| self.mixer.index_of(id));
+            slot.output = self.mixer.resolve(&slot.params.route);
             slot.source.begin_buffer();
+        }
+
+        for slot in &mut self.inputs {
+            slot.output = self.mixer.resolve(&slot.params.route);
+            slot.begin_buffer();
         }
 
         self.mixer.begin_buffer();
@@ -129,6 +146,13 @@ impl AudioSource for Studio {
     fn next_sample(&mut self) -> f32 {
         for slot in &mut self.instruments {
             let sample = slot.source.next_sample();
+            if let Some(ch) = slot.output {
+                self.mixer.add_input(ch, sample);
+            }
+        }
+
+        for slot in &mut self.inputs {
+            let sample = slot.next_sample();
             if let Some(ch) = slot.output {
                 self.mixer.add_input(ch, sample);
             }

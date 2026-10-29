@@ -88,3 +88,29 @@ impl Channel {
         out
     }
 }
+
+const NO_CHANNEL: u32 = u32::MAX;
+
+pub struct ChannelRoute(AtomicU32);
+
+impl ChannelRoute {
+    pub fn new(channel: Option<ChannelId>) -> Self {
+        Self {
+            0: AtomicU32::new(channel.map_or(NO_CHANNEL, ChannelId::to_raw)),
+        }
+    }
+
+    pub fn set_channel(&self, channel: Option<ChannelId>) {
+        self.0.store(
+            channel.map_or(NO_CHANNEL, ChannelId::to_raw),
+            Ordering::Relaxed,
+        );
+    }
+
+    pub fn get_channel(&self) -> Option<ChannelId> {
+        match self.0.load(Ordering::Relaxed) {
+            NO_CHANNEL => None,
+            raw => Some(ChannelId::from_raw(raw)),
+        }
+    }
+}
