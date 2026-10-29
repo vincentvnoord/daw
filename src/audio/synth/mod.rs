@@ -4,10 +4,12 @@ pub mod envelope;
 pub mod osc;
 pub mod voice;
 
+use crate::audio::dsp::filter::LowPassFilter;
 use crate::audio::instrument::Instrument;
 
 use crate::audio::source::AudioSource;
-use crate::audio::synth::osc::AtomicWaveForm;
+use crate::audio::synth::envelope::{Envelope, EnvelopeSettings};
+use crate::audio::synth::osc::{AtomicWaveForm, Oscillator, WaveForm};
 use crate::audio::synth::voice::Voice;
 use crate::helpers::AtomicF32;
 
@@ -36,6 +38,41 @@ impl Synth {
             voices,
             params,
         }
+    }
+
+    pub fn default(sample_rate: f32) -> Self {
+        let env_settings = EnvelopeSettings {
+            attack: 0.005,
+            decay: 0.5,
+            sustain: 1.0,
+            release: 0.8,
+        };
+        let waveform = WaveForm::Saw;
+        let voices: Vec<Voice> = (0..8)
+            .map(|_| {
+                Voice::new(
+                    Oscillator::new(waveform, 440.0, sample_rate),
+                    Envelope::new(env_settings, sample_rate),
+                    LowPassFilter::new(200.0, sample_rate),
+                )
+            })
+            .collect();
+
+        let params = Arc::new(SynthParams {
+            waveform: AtomicWaveForm::new(waveform),
+            cutoff: AtomicF32::new(500.0),
+            attack: AtomicF32::new(env_settings.attack),
+            decay: AtomicF32::new(env_settings.decay),
+            sustain: AtomicF32::new(env_settings.sustain),
+            release: AtomicF32::new(env_settings.release),
+        });
+
+        Synth::new(voices, params)
+    }
+
+    /// The params shared with the UI.
+    pub fn params(&self) -> Arc<SynthParams> {
+        Arc::clone(&self.params)
     }
 
     fn find_voice_for(&self, note: u8) -> usize {

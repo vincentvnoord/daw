@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    audio::{mixer::meter::Meter, source::AudioSource},
+    audio::mixer::meter::Meter,
     helpers::AtomicF32,
 };
 
@@ -11,7 +11,7 @@ pub struct ChannelParams {
 }
 
 pub struct Channel {
-    sources: Vec<Box<dyn AudioSource>>,
+    input: f32,
     params: Arc<ChannelParams>,
     gain: f32,
     peak: f32,
@@ -21,33 +21,27 @@ impl Channel {
     pub fn new(params: Arc<ChannelParams>) -> Self {
         let gain = params.gain.get();
         Channel {
-            sources: Vec::new(),
+            input: 0.0,
             params,
             gain,
             peak: 0.0,
         }
     }
 
-    pub fn add(&mut self, source: impl AudioSource) {
-        self.sources.push(Box::new(source));
+    pub fn add_input(&mut self, sample: f32) {
+        self.input += sample;
     }
-}
 
-impl AudioSource for Channel {
-    fn begin_buffer(&mut self) {
+    pub fn begin_buffer(&mut self) {
         self.params.meter.record(self.peak);
         self.peak = 0.0;
 
         self.gain = self.params.gain.get();
-
-        for source in &mut self.sources {
-            source.begin_buffer();
-        }
     }
 
-    fn next_sample(&mut self) -> f32 {
-        let sum: f32 = self.sources.iter_mut().map(|s| s.next_sample()).sum();
-        let out = sum * self.gain;
+    pub fn process(&mut self) -> f32 {
+        let out = self.input * self.gain;
+        self.input = 0.0;
         self.peak = self.peak.max(out.abs());
 
         out

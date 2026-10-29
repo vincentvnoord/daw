@@ -34,8 +34,16 @@ impl Mixer {
         }
     }
 
-    pub fn add(&mut self, channel: Channel) {
+    /// Adds a channel and returns its index.
+    pub fn add(&mut self, channel: Channel) -> usize {
         self.channels.push(channel);
+        self.channels.len() - 1
+    }
+
+    pub fn add_input(&mut self, channel_idx: usize, input: f32) {
+        if let Some(ch) = self.channels.get_mut(channel_idx) {
+            ch.add_input(input);
+        }
     }
 }
 
@@ -51,7 +59,7 @@ impl AudioSource for Mixer {
     }
 
     fn next_sample(&mut self) -> f32 {
-        let sum: f32 = self.channels.iter_mut().map(|s| s.next_sample()).sum();
+        let sum: f32 = self.channels.iter_mut().map(|c| c.process()).sum();
         let out = sum * self.gain;
         self.peak = self.peak.max(out.abs());
 
