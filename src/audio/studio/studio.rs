@@ -9,7 +9,7 @@ use crate::{
             Mixer, MixerParams,
             channel::{Channel, ChannelId, ChannelParams},
         },
-        source::AudioSource,
+        source::{AudioSource, StereoSource},
         studio::{
             input::InputSlot,
             instrument::{InstrumentParams, InstrumentSlot},
@@ -126,7 +126,7 @@ impl Studio {
     }
 }
 
-impl AudioSource for Studio {
+impl StereoSource for Studio {
     fn begin_buffer(&mut self) {
         self.handle_commands();
 
@@ -143,7 +143,7 @@ impl AudioSource for Studio {
         self.mixer.begin_buffer();
     }
 
-    fn next_sample(&mut self) -> f32 {
+    fn next_frame(&mut self) -> crate::audio::frame::Frame {
         for slot in &mut self.instruments {
             let sample = slot.source.next_sample();
             if let Some(ch) = slot.output {
@@ -158,6 +158,6 @@ impl AudioSource for Studio {
             }
         }
 
-        self.mixer.next_sample()
+        self.mixer.next_frame()
     }
 }

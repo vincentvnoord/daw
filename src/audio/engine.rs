@@ -3,7 +3,7 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 
-use crate::audio::{output::build_stream, source::AudioSource};
+use crate::audio::{output::build_stream, source::StereoSource};
 
 const ALSA_BUFFER_SIZE: u32 = 1024;
 
@@ -66,7 +66,7 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    pub fn new<A: AudioSource>(device: AudioDevice, mixer: A) -> AudioEngine {
+    pub fn new<A: StereoSource>(device: AudioDevice, mixer: A) -> AudioEngine {
         let stream = match device.sample_format {
             SampleFormat::F32 => build_stream::<f32, A>(device, mixer),
             SampleFormat::I16 => build_stream::<i16, A>(device, mixer),

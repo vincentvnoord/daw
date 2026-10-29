@@ -3,7 +3,10 @@ use std::sync::{
     atomic::{AtomicU32, Ordering},
 };
 
-use crate::{audio::mixer::meter::Meter, helpers::AtomicF32};
+use crate::{
+    audio::{frame::Frame, mixer::meter::Meter},
+    helpers::AtomicF32,
+};
 
 /// Gain a new channel starts with.
 pub const DEFAULT_GAIN: f32 = 0.5;
@@ -80,12 +83,15 @@ impl Channel {
         self.gain = self.params.gain.get();
     }
 
-    pub fn process(&mut self) -> f32 {
+    pub fn process(&mut self) -> Frame {
         let out = self.input * self.gain;
         self.input = 0.0;
         self.peak = self.peak.max(out.abs());
 
-        out
+        Frame {
+            left: out,
+            right: out,
+        }
     }
 }
 

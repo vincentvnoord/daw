@@ -5,11 +5,12 @@ pub mod meter;
 
 use crate::{
     audio::{
+        frame::Frame,
         mixer::{
             channel::{Channel, ChannelId, ChannelRoute},
             meter::Meter,
         },
-        source::AudioSource,
+        source::StereoSource,
     },
     helpers::AtomicF32,
 };
@@ -75,7 +76,7 @@ impl Mixer {
     }
 }
 
-impl AudioSource for Mixer {
+impl StereoSource for Mixer {
     fn begin_buffer(&mut self) {
         self.params.meter.record(self.peak);
         self.peak = 0.0;
@@ -86,10 +87,10 @@ impl AudioSource for Mixer {
         }
     }
 
-    fn next_sample(&mut self) -> f32 {
-        let sum: f32 = self.channels.iter_mut().map(|c| c.process()).sum();
+    fn next_frame(&mut self) -> Frame {
+        let sum: Frame = self.channels.iter_mut().map(|c| c.process()).sum();
         let out = sum * self.gain;
-        self.peak = self.peak.max(out.abs());
+        self.peak = self.peak.max(out.left.abs().max(out.right.abs()));
 
         out
     }

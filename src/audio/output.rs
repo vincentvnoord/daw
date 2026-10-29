@@ -1,8 +1,8 @@
 use cpal::{FromSample, Sample, traits::DeviceTrait};
 
-use crate::audio::{engine::AudioDevice, source::AudioSource};
+use crate::audio::{engine::AudioDevice, frame::Frame, source::StereoSource};
 
-pub fn build_stream<T, A: AudioSource>(
+pub fn build_stream<T, A: StereoSource>(
     device: AudioDevice,
     mut source: A,
 ) -> Result<cpal::Stream, Box<dyn std::error::Error>>
@@ -17,7 +17,7 @@ where
         *config,
         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
             source.begin_buffer();
-            write_frames(data, channels, || source.next_sample());
+            write_frames(data, channels, || source.next_frame());
         },
         err_fn,
         None,
@@ -29,12 +29,19 @@ where
 fn write_frames<T: Sample + FromSample<f32>>(
     data: &mut [T],
     channels: usize,
-    mut next: impl FnMut() -> f32,
+    mut next: impl FnMut() -> Frame,
 ) {
-    for frame in data.chunks_mut(channels) {
-        let value = T::from_sample_(next());
-        for sample in frame.iter_mut() {
-            *sample = value;
+    for chunk in data.chunks_mut(channels) {
+        let frame = next();
+        if channels == 1 {
+            chunk[0] = T::from_sample_((frame.left + frame.right) * 0.5);
+        } else {
+            chunk[0] = T::from_sample_(frame.left);
+            chunk[1] = T::from_sample_(frame.right);
+
+            for sample in chunk.iter_mut().skip(2) {
+                *sample = T::EQUILIBRIUM;
+            }
         }
     }
 }
