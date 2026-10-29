@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use rtrb::{Consumer, Producer, RingBuffer};
+use rtrb::{Consumer, Producer};
 
 use crate::{
     audio::{
-        instrument::{Instrument, InstrumentSource},
+        instrument::Instrument,
         mixer::{
             Mixer, MixerParams,
             channel::{Channel, ChannelId, ChannelParams},
@@ -15,13 +15,16 @@ use crate::{
     events::NoteEvent,
 };
 
-/// How many note events can wait for the audio thread per instrument.
-const NOTE_QUEUE_SIZE: usize = 256;
+/// Most instruments the studio can hold. Space for all of them is reserved
+/// up front, so adding one while audio runs never allocates on the audio
+/// thread.
+pub const MAX_INSTRUMENTS: usize = 64;
 
 /// Changes the UI asks the studio to make while the audio is running.
 pub enum StudioCommand {
     AddChannel(Channel),
     RemoveChannel(ChannelId),
+    AddInstrument(InstrumentSlot),
 }
 
 /// Things the studio no longer uses. They go back to the UI thread to be
@@ -29,6 +32,7 @@ pub enum StudioCommand {
 #[allow(dead_code)] // only held so it gets dropped on the UI thread
 pub enum Garbage {
     Channel(Channel),
+    Instrument(InstrumentSlot),
 }
 
 pub struct Studio {
@@ -45,7 +49,7 @@ impl Studio {
         garbage: Producer<Garbage>,
     ) -> Self {
         Self {
-            instruments: Vec::new(),
+            instruments: Vec::with_capacity(MAX_INSTRUMENTS),
             mixer: Mixer::new(mixer_params),
             commands,
             garbage,
@@ -69,11 +73,9 @@ impl Studio {
         instrument: impl Instrument,
         channel: Option<ChannelId>,
     ) -> (Producer<NoteEvent>, Arc<InstrumentParams>) {
-        let (notes, consumer) = RingBuffer::new(NOTE_QUEUE_SIZE);
-        let params = Arc::new(InstrumentParams::new(channel));
-        let source = InstrumentSource::new(consumer, instrument);
-        self.instruments
-            .push(InstrumentSlot::new(Arc::clone(&params), Box::new(source)));
+        assert!(self.instruments.len() < MAX_INSTRUMENTS, "studio is full");
+        let (slot, notes, params) = InstrumentSlot::create(instrument, channel);
+        self.instruments.push(slot);
 
         (notes, params)
     }
@@ -89,6 +91,13 @@ impl Studio {
                 StudioCommand::RemoveChannel(id) => {
                     if let Some(channel) = self.mixer.remove(id) {
                         self.discard(Garbage::Channel(channel));
+                    }
+                }
+                StudioCommand::AddInstrument(slot) => {
+                    if self.instruments.len() < MAX_INSTRUMENTS {
+                        self.instruments.push(slot);
+                    } else {
+                        self.discard(Garbage::Instrument(slot));
                     }
                 }
             }

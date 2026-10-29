@@ -3,9 +3,21 @@ use std::sync::{
     atomic::{AtomicU32, Ordering},
 };
 
-use crate::audio::{mixer::channel::ChannelId, source::AudioSource};
+use rtrb::{Producer, RingBuffer};
+
+use crate::{
+    audio::{
+        instrument::{Instrument, InstrumentSource},
+        mixer::channel::ChannelId,
+        source::AudioSource,
+    },
+    events::NoteEvent,
+};
 
 const NO_CHANNEL: u32 = u32::MAX;
+
+/// How many note events can wait for the audio thread per instrument.
+const NOTE_QUEUE_SIZE: usize = 256;
 
 pub struct InstrumentParams {
     output_channel: AtomicU32,
@@ -40,6 +52,20 @@ pub struct InstrumentSlot {
 }
 
 impl InstrumentSlot {
+    /// Wraps an instrument for the studio, routed to `channel`. Returns the
+    /// slot, the end the keyboard sends notes into, and the params for the UI.
+    pub fn create(
+        instrument: impl Instrument,
+        channel: Option<ChannelId>,
+    ) -> (Self, Producer<NoteEvent>, Arc<InstrumentParams>) {
+        let (notes, consumer) = RingBuffer::new(NOTE_QUEUE_SIZE);
+        let params = Arc::new(InstrumentParams::new(channel));
+        let source = InstrumentSource::new(consumer, instrument);
+        let slot = Self::new(Arc::clone(&params), Box::new(source));
+
+        (slot, notes, params)
+    }
+
     pub fn new(params: Arc<InstrumentParams>, source: Box<dyn AudioSource>) -> Self {
         Self {
             source,

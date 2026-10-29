@@ -6,7 +6,8 @@ use crate::{
     events::NoteEvent,
     shared::AppParams,
     ui::{
-        editor_panel, instrument_panel,
+        editor_panel,
+        instrument_panel::{self, InstrumentAction},
         keyboard::{self, key_to_note_event},
         mixer_panel::MixerPanel,
         theme,
@@ -39,6 +40,25 @@ impl App {
     fn send(&mut self, event: NoteEvent) {
         if let Some(instrument) = self.params.instruments.get_mut(self.active) {
             let _ = instrument.notes.push(event);
+        }
+    }
+
+    /// Asks for a WAV file and adds a sampler that plays it.
+    fn add_sample(&mut self) {
+        let mut dialog = rfd::FileDialog::new()
+            .set_title("Add sample")
+            .add_filter("WAV audio", &["wav"]);
+        if let Ok(dir) = std::fs::canonicalize("testsamples") {
+            dialog = dialog.set_directory(dir);
+        }
+        let Some(path) = dialog.pick_file() else {
+            return;
+        };
+
+        match self.params.add_sample(&path) {
+            Ok(Some(index)) => self.set_active(index),
+            Ok(None) => eprintln!("can't add more instruments"),
+            Err(err) => eprintln!("failed to load {}: {err}", path.display()),
         }
     }
 
@@ -138,20 +158,28 @@ impl eframe::App for App {
             .resizable(false)
             .show(ui, |ui| self.mixer_panel.show(ui, &mut self.params));
 
+        let mut instrument_action = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(16))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
                 ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
-                    if let Some(index) = instrument_panel::show(ui, &self.params, self.active) {
-                        self.set_active(index);
-                    }
-
-                    if let Some(instrument) = self.params.instruments.get(self.active) {
-                        editor_panel::show(ui, instrument);
-                    }
+                    instrument_action = instrument_panel::show(ui, &self.params, self.active);
+                    editor_panel::show(ui, &mut self.params, self.active);
                 });
             });
+
+        // handled after drawing, so the file dialog doesn't open mid-frame
+        match instrument_action {
+            Some(InstrumentAction::Select(index)) => self.set_active(index),
+            Some(InstrumentAction::AddSynth) => {
+                if let Some(index) = self.params.add_synth() {
+                    self.set_active(index);
+                }
+            }
+            Some(InstrumentAction::AddSample) => self.add_sample(),
+            None => {}
+        }
 
         // keep redrawing so the meters move without mouse input
         ui.ctx().request_repaint();

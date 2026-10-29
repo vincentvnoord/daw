@@ -76,7 +76,7 @@ pub fn piano(
         for (i, &note) in whites.iter().enumerate() {
             let r = white_rect(i).shrink2(vec2(1.0, 0.0));
             let fill = if held.contains(&note) {
-                theme::ACCENT
+                theme::PRESSED
             } else {
                 WHITE
             };
@@ -94,7 +94,7 @@ pub fn piano(
 
         for &(note, r) in &blacks {
             let fill = if held.contains(&note) {
-                theme::ACCENT
+                theme::PRESSED
             } else {
                 BLACK
             };

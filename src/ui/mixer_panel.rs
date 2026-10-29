@@ -89,7 +89,7 @@ impl MixerPanel {
         });
 
         if add_channel {
-            params.add_channel();
+            params.add_channel(params.next_channel_name());
         }
         if let Some((index, id)) = remove_channel {
             params.remove_channel(id);

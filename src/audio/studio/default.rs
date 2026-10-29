@@ -5,7 +5,7 @@ use rtrb::RingBuffer;
 use crate::{
     audio::{
         mixer::{MixerParams, channel::DEFAULT_GAIN, meter::Meter},
-        sampler::{Sampler, sample::Sample},
+        sampler::{Sampler, VOICES, sample::Sample},
         studio::studio::Studio,
         synth::Synth,
     },
@@ -37,13 +37,14 @@ pub fn default_studio(sample_rate: f32) -> (Studio, AppParams) {
 
     let kick = Sample::load(Path::new(KICK_PATH), sample_rate).expect("failed to load kick sample");
     let (kick_notes, kick_params) =
-        studio.add_instrument(Sampler::new(kick.data, 8), Some(drums.id));
+        studio.add_instrument(Sampler::new(kick.data, VOICES), Some(drums.id));
 
     let synth = Synth::default(sample_rate);
     let synth_params = synth.params();
     let (synth_notes, synth_instrument_params) = studio.add_instrument(synth, Some(keys.id));
 
     let params = AppParams {
+        sample_rate,
         mixer,
         channels: vec![
             ChannelHandle {

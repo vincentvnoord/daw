@@ -4,6 +4,9 @@ pub mod sample;
 
 use crate::audio::{instrument::Instrument, source::AudioSource};
 
+/// How many hits of a sample can ring at the same time.
+pub const VOICES: usize = 8;
+
 pub struct Sampler {
     voices: Vec<SampleVoice>,
     ages: Vec<u64>,
