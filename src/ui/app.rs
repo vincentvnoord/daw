@@ -6,16 +6,18 @@ use crate::{
     events::NoteEvent,
     shared::AppParams,
     ui::{
+        editor_panel, instrument_panel,
         keyboard::{self, key_to_note_event},
         mixer_panel::MixerPanel,
-        synth_panel, theme,
+        theme,
         widgets::piano::piano,
     },
 };
 
 pub struct App {
-    note_producer: rtrb::Producer<NoteEvent>,
     params: AppParams,
+    /// Index of the instrument the keyboard plays.
+    active: usize,
     held_keys: BTreeSet<u8>,
     /// Note currently played by clicking the on-screen piano.
     mouse_note: Option<u8>,
@@ -23,33 +25,52 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(note_producer: rtrb::Producer<NoteEvent>, params: AppParams) -> Self {
+    pub fn new(params: AppParams) -> Self {
         Self {
-            note_producer,
+            params,
+            active: 0,
             held_keys: BTreeSet::new(),
             mouse_note: None,
-            params,
             mixer_panel: MixerPanel::default(),
         }
     }
 
-    fn handle_keys(&mut self, ui: &egui::Ui) {
-        ui.input(|i| {
-            for ev in &i.events {
-                if let Some(note_event) = key_to_note_event(ev) {
-                    match note_event {
-                        NoteEvent::On(n) => {
-                            self.held_keys.insert(n);
-                        }
-                        NoteEvent::Off(n) => {
-                            self.held_keys.remove(&n);
-                        }
-                    }
+    /// Sends a note to the active instrument.
+    fn send(&mut self, event: NoteEvent) {
+        if let Some(instrument) = self.params.instruments.get_mut(self.active) {
+            let _ = instrument.notes.push(event);
+        }
+    }
 
-                    let _ = self.note_producer.push(note_event);
+    /// Switches the keyboard to another instrument. Releases every held note
+    /// on the old one first, otherwise those notes would never get a note off.
+    fn set_active(&mut self, index: usize) {
+        let held: Vec<u8> = self.held_keys.iter().copied().chain(self.mouse_note).collect();
+        for n in held {
+            self.send(NoteEvent::Off(n));
+        }
+        self.held_keys.clear();
+        self.mouse_note = None;
+
+        self.active = index;
+    }
+
+    fn handle_keys(&mut self, ui: &egui::Ui) {
+        let events: Vec<NoteEvent> =
+            ui.input(|i| i.events.iter().filter_map(key_to_note_event).collect());
+
+        for note_event in events {
+            match note_event {
+                NoteEvent::On(n) => {
+                    self.held_keys.insert(n);
+                }
+                NoteEvent::Off(n) => {
+                    self.held_keys.remove(&n);
                 }
             }
-        });
+
+            self.send(note_event);
+        }
     }
 
     fn set_mouse_note(&mut self, note: Option<u8>) {
@@ -57,10 +78,10 @@ impl App {
             return;
         }
         if let Some(n) = self.mouse_note {
-            let _ = self.note_producer.push(NoteEvent::Off(n));
+            self.send(NoteEvent::Off(n));
         }
         if let Some(n) = note {
-            let _ = self.note_producer.push(NoteEvent::On(n));
+            self.send(NoteEvent::On(n));
         }
         self.mouse_note = note;
     }
@@ -98,6 +119,7 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.params.collect_garbage();
         self.handle_keys(ui);
 
         egui::Panel::top("header")
@@ -105,19 +127,29 @@ impl eframe::App for App {
             .resizable(false)
             .show(ui, |ui| self.header(ui));
 
+        // bottom panels stack upwards: the piano at the very bottom, the mixer above it
         egui::Panel::bottom("keyboard")
             .frame(theme::panel_frame())
             .resizable(false)
             .show(ui, |ui| self.keyboard(ui));
 
+        egui::Panel::bottom("mixer")
+            .frame(theme::panel_frame())
+            .resizable(false)
+            .show(ui, |ui| self.mixer_panel.show(ui, &mut self.params));
+
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(16))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
-                let layout = Layout::left_to_right(Align::Min).with_main_wrap(true);
-                ui.with_layout(layout, |ui| {
-                    synth_panel::show(ui, &self.params.synth);
-                    self.mixer_panel.show(ui, &self.params);
+                ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
+                    if let Some(index) = instrument_panel::show(ui, &self.params, self.active) {
+                        self.set_active(index);
+                    }
+
+                    if let Some(instrument) = self.params.instruments.get(self.active) {
+                        editor_panel::show(ui, instrument);
+                    }
                 });
             });
 

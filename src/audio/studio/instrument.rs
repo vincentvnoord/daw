@@ -1,38 +1,40 @@
 use std::sync::{
     Arc,
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicU32, Ordering},
 };
 
-use crate::audio::source::AudioSource;
+use crate::audio::{mixer::channel::ChannelId, source::AudioSource};
 
-const NO_CHANNEL: usize = usize::MAX;
+const NO_CHANNEL: u32 = u32::MAX;
 
 pub struct InstrumentParams {
-    output_channel: AtomicUsize,
+    output_channel: AtomicU32,
 }
 
 impl InstrumentParams {
-    pub fn new(channel: Option<usize>) -> Self {
+    pub fn new(channel: Option<ChannelId>) -> Self {
         Self {
-            output_channel: AtomicUsize::new(channel.unwrap_or(NO_CHANNEL)),
+            output_channel: AtomicU32::new(channel.map_or(NO_CHANNEL, ChannelId::to_raw)),
         }
     }
 
-    pub fn set_channel(&self, channel: Option<usize>) {
+    pub fn set_channel(&self, channel: Option<ChannelId>) {
         self.output_channel
-            .store(channel.unwrap_or(NO_CHANNEL), Ordering::Relaxed);
+            .store(channel.map_or(NO_CHANNEL, ChannelId::to_raw), Ordering::Relaxed);
     }
 
-    pub fn get_channel(&self) -> Option<usize> {
+    pub fn get_channel(&self) -> Option<ChannelId> {
         match self.output_channel.load(Ordering::Relaxed) {
             NO_CHANNEL => None,
-            c => Some(c),
+            raw => Some(ChannelId::from_raw(raw)),
         }
     }
 }
 
 pub struct InstrumentSlot {
     pub source: Box<dyn AudioSource>,
+    /// Index in the mixer of the channel this instrument plays into, looked
+    /// up from the params once per buffer.
     pub output: Option<usize>,
     pub params: Arc<InstrumentParams>,
 }

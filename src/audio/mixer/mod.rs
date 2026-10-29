@@ -5,11 +5,19 @@ pub mod meter;
 
 use crate::{
     audio::{
-        mixer::{channel::Channel, meter::Meter},
+        mixer::{
+            channel::{Channel, ChannelId},
+            meter::Meter,
+        },
         source::AudioSource,
     },
     helpers::AtomicF32,
 };
+
+/// Most channels the mixer can hold. Space for all of them is reserved up
+/// front, so adding a channel while audio runs never allocates on the audio
+/// thread.
+pub const MAX_CHANNELS: usize = 64;
 
 pub struct MixerParams {
     pub gain: AtomicF32,
@@ -27,17 +35,33 @@ impl Mixer {
     pub fn new(params: Arc<MixerParams>) -> Self {
         let gain = params.gain.get();
         Self {
-            channels: Vec::new(),
+            channels: Vec::with_capacity(MAX_CHANNELS),
             params,
             gain,
             peak: 0.0,
         }
     }
 
-    /// Adds a channel and returns its index.
-    pub fn add(&mut self, channel: Channel) -> usize {
+    /// Adds a channel. Gives it back when the mixer is full.
+    pub fn add(&mut self, channel: Channel) -> Result<(), Channel> {
+        if self.channels.len() >= MAX_CHANNELS {
+            return Err(channel);
+        }
+
         self.channels.push(channel);
-        self.channels.len() - 1
+        Ok(())
+    }
+
+    /// Takes a channel out of the mixer. The channels after it move up one
+    /// place; nothing is reallocated.
+    pub fn remove(&mut self, id: ChannelId) -> Option<Channel> {
+        let index = self.index_of(id)?;
+        Some(self.channels.remove(index))
+    }
+
+    /// Where the channel with this id currently sits.
+    pub fn index_of(&self, id: ChannelId) -> Option<usize> {
+        self.channels.iter().position(|c| c.id() == id)
     }
 
     pub fn add_input(&mut self, channel_idx: usize, input: f32) {

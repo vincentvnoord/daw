@@ -16,13 +16,13 @@ mod ui;
 
 fn main() -> eframe::Result {
     let device = AudioDevice::default();
-    let (studio, params, notes) = default_studio(device.sample_rate());
+    let (studio, params) = default_studio(device.sample_rate());
     let _engine = AudioEngine::new(device, studio);
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([760.0, 440.0])
-            .with_min_inner_size([560.0, 380.0]),
+            .with_inner_size([960.0, 720.0])
+            .with_min_inner_size([720.0, 600.0]),
         ..Default::default()
     };
 
@@ -31,7 +31,7 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| {
             ui::theme::apply(&cc.egui_ctx);
-            Ok(Box::new(App::new(notes, params)))
+            Ok(Box::new(App::new(params)))
         }),
     )
 }
