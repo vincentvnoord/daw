@@ -124,18 +124,6 @@ impl App {
             ui.label(RichText::new("Vincent Studio").heading().strong());
             ui.add_space(theme::GAP * 2.0);
             transport_panel::show(ui, &self.params);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let held = self.held_keys.len() + self.mouse_note.is_some() as usize;
-                ui.label(
-                    RichText::new(format!("{held} held"))
-                        .font(theme::value_font())
-                        .color(if held > 0 {
-                            theme::ACCENT
-                        } else {
-                            theme::TEXT_DIM
-                        }),
-                );
-            });
         });
     }
 

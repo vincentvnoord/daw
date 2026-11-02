@@ -12,6 +12,8 @@ pub enum Icon {
     Pause,
     /// Back to the start: a bar with a triangle pointing at it.
     Rewind,
+    /// A trapezoid body with a pendulum leaning to the right.
+    Metronome,
 }
 
 /// A button showing an icon drawn with shapes. `selected` fills it, like a
@@ -93,6 +95,24 @@ fn shapes(icon: Icon, r: Rect, color: Color32) -> Vec<Shape> {
                     color,
                 ),
                 triangle_left(triangle, color),
+            ]
+        }
+        Icon::Metronome => {
+            // outlined, so the pendulum stays visible where it crosses the body
+            let stroke = Stroke::new(1.5, color);
+            let inset = r.width() * 0.3;
+            let body = vec![
+                pos2(r.left() + inset, r.top()),
+                pos2(r.right() - inset, r.top()),
+                r.right_bottom(),
+                r.left_bottom(),
+            ];
+            vec![
+                Shape::closed_line(body, stroke),
+                Shape::line_segment(
+                    [r.center_bottom(), pos2(r.right(), r.top() + r.height() * 0.15)],
+                    stroke,
+                ),
             ]
         }
     }

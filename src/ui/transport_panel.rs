@@ -7,11 +7,13 @@ use crate::{
     shared::AppParams,
     ui::{
         theme,
-        widgets::icon_button::{Icon, IconButton},
+        widgets::{
+            icon_button::{Icon, IconButton},
+            knob::Knob,
+            value::Unit,
+        },
     },
 };
-
-const VOLUME_WIDTH: f32 = 60.0;
 
 /// Play and rewind buttons, the tempo, where the playhead is, and the
 /// metronome switch. Sized to sit in the header bar.
@@ -57,25 +59,19 @@ pub fn show(ui: &mut egui::Ui, params: &AppParams) {
     ui.add_space(theme::GAP);
 
     let metronome = &params.metronome;
-    let mut enabled = metronome.enabled.load(Ordering::Relaxed);
-    if ui
-        .toggle_value(&mut enabled, "Click")
-        .on_hover_text("Metronome")
-        .changed()
-    {
-        metronome.enabled.store(enabled, Ordering::Relaxed);
+    let enabled = metronome.enabled.load(Ordering::Relaxed);
+    let response = ui
+        .add(IconButton::new(Icon::Metronome).selected(enabled))
+        .on_hover_text("Metronome, right-click for volume");
+
+    if response.clicked() {
+        metronome.enabled.fetch_xor(true, Ordering::Relaxed);
     }
 
-    let mut volume = metronome.volume.get();
-    ui.spacing_mut().slider_width = VOLUME_WIDTH;
-    let slider = egui::Slider::new(&mut volume, 0.0..=1.0).show_value(false);
-    if ui
-        .add_enabled(enabled, slider)
-        .on_hover_text("Click volume")
-        .changed()
-    {
-        metronome.volume.set(volume);
-    }
+    // the volume is an atomic, so it can be changed right here
+    response.context_menu(|ui| {
+        ui.add(Knob::new(&metronome.volume, 0.0..=1.0, "Volume", Unit::Percent));
+    });
 }
 
 /// The playhead as bar.beat, and as minutes and seconds.
