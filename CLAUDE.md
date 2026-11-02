@@ -10,7 +10,7 @@ This is a learning project. Claude implements features on a feature branch and t
 
 Two threads, and the `project` / `audio` split follows them:
 
-- `src/project/` is the UI thread's side: `Project` owns the tracks, channels and inputs as handles, and every change to the studio goes through a method on it.
+- `src/project/` is the UI thread's side: `Project` owns the tracks (instrument or audio), sequences and channels as handles, and every change to the studio goes through a method on it.
 - `src/audio/` is the audio thread's side: `Studio` (in `audio/studio/`) is the one `StereoSource` the engine plays. `audio` never imports from `project` or `ui`.
 - `src/ui/` draws the `Project`; panels in `ui/`, reusable controls in `ui/widgets/`.
 
@@ -23,7 +23,7 @@ The threads talk in exactly four ways. A new feature picks one of these:
 | `Garbage` queue | audio → UI | anything the studio drops, freed on the UI thread |
 | per-instrument `NoteEvent` ring buffer | UI → audio | live keyboard notes |
 
-Signal flow per sample: instrument and input slots produce mono `f32` → `Mixer::add_input` on the channel their `ChannelRoute` resolves to → `Channel` applies gain and pan into a stereo `Frame` → master gain → metronome click added after the mixer.
+Signal flow per sample: instrument slots and input slots (one per audio track) produce mono `f32` → `Mixer::add_input` on the channel their `ChannelRoute` resolves to → `Channel` applies gain and pan into a stereo `Frame` → master gain → metronome click added after the mixer.
 
 ## Real-time rules
 

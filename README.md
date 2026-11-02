@@ -1,6 +1,6 @@
 # Vincent Studio
 
-A small DAW written in Rust: synth and sampler tracks, a mixer with gain, pan and meters, live audio inputs, and a transport with a metronome. Built on [cpal](https://github.com/RustAudio/cpal) and [egui](https://github.com/emilk/egui).
+A small DAW written in Rust: synth, sampler and audio tracks on a timeline with a piano roll, a mixer with gain, pan and meters, and a transport with a metronome. Built on [cpal](https://github.com/RustAudio/cpal) and [egui](https://github.com/emilk/egui).
 
 ## Running
 

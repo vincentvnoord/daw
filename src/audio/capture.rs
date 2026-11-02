@@ -6,6 +6,8 @@ use cpal::{
 };
 use rtrb::Producer;
 
+use crate::audio::latency;
+
 /// The sample formats we can record in, best first. A device often offers
 /// several; we take the first one it has.
 const FORMATS: [SampleFormat; 4] = [
@@ -36,7 +38,17 @@ pub fn open_input(
         .ok_or("input device has no config we can record at the output's sample rate")?;
 
     let sample_format = supported.sample_format();
-    let config: cpal::StreamConfig = supported.into();
+    let supported_buffer = *supported.buffer_size();
+    let mut config: cpal::StreamConfig = supported.into();
+    // small, like the output's, so input arrives in short regular chunks
+    config.buffer_size = latency::buffer_size(&supported_buffer);
+
+    if latency::logging() {
+        eprintln!(
+            "[latency] input: channel {channel} of {} channels, {} Hz, {sample_format}, buffer {:?} (supports {supported_buffer:?})",
+            config.channels, config.sample_rate, config.buffer_size,
+        );
+    }
 
     let stream = match sample_format {
         SampleFormat::F32 => build::<f32>(device, &config, channel, samples),

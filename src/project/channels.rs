@@ -8,7 +8,7 @@ use crate::{
         },
         studio::StudioCommand,
     },
-    project::Project,
+    project::{Project, Track},
 };
 
 /// The UI's side of a mixer channel.
@@ -56,8 +56,8 @@ impl Project {
         format!("Channel {}", self.channels.len() + 1)
     }
 
-    /// Removes a mixer channel while the audio is running. Instruments and
-    /// inputs that played into it get no output.
+    /// Removes a mixer channel while the audio is running. Tracks that
+    /// played into it get no output.
     pub fn remove_channel(&mut self, id: ChannelId) {
         if self
             .commands
@@ -68,12 +68,7 @@ impl Project {
         }
 
         self.channels.retain(|c| c.id() != id);
-        let routes = self
-            .tracks
-            .iter()
-            .map(|t| &t.instrument.params.route)
-            .chain(self.inputs.iter().map(|i| &i.params.route));
-        for route in routes {
+        for route in self.tracks.iter().map(Track::route) {
             if route.get_channel() == Some(id) {
                 route.set_channel(None);
             }

@@ -112,6 +112,7 @@ impl Timeline {
     ) -> Option<TrackAction> {
         let pointer = ui.input(|i| i.pointer.latest_pos());
         let snap = !ui.input(|i| i.modifiers.alt);
+        let takes: Vec<bool> = project.tracks.iter().map(|t| t.takes_sequences()).collect();
         let mut action = None;
 
         for (track, (lane, placements)) in lanes
@@ -162,7 +163,7 @@ impl Timeline {
                     && let Some(drag) = self.drag.take()
                     && let Some(pointer) = pointer
                 {
-                    let (to, start) = drag.target(pointer, grid, lanes, snap);
+                    let (to, start) = drag.target(pointer, grid, lanes, &takes, snap);
                     action = Some(TrackAction::MovePlacement {
                         from: drag.track,
                         index: drag.index,
@@ -182,7 +183,7 @@ impl Timeline {
                 .and_then(|p| project.sequences.get(p.sequence))
         {
             ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
-            let (to, start) = drag.target(pointer, grid, lanes, snap);
+            let (to, start) = drag.target(pointer, grid, lanes, &takes, snap);
             let rect = block_rect(grid, lanes[to], start, sequence.length);
             block(ui.painter(), grid, rect, sequence, Look::Dragged);
         }
@@ -193,11 +194,20 @@ impl Timeline {
 
 impl Drag {
     /// The track and start the placement would land on with the pointer at
-    /// `pointer`: the lane under it (or its own, off the lanes), snapped.
-    fn target(&self, pointer: Pos2, grid: &Grid, lanes: &[Rect], snap: bool) -> (usize, f64) {
+    /// `pointer`: the lane under it if that track `takes` sequences (or its
+    /// own otherwise), snapped.
+    fn target(
+        &self,
+        pointer: Pos2,
+        grid: &Grid,
+        lanes: &[Rect],
+        takes: &[bool],
+        snap: bool,
+    ) -> (usize, f64) {
         let track = lanes
             .iter()
-            .position(|lane| lane.y_range().contains(pointer.y))
+            .zip(takes)
+            .position(|(lane, &takes)| takes && lane.y_range().contains(pointer.y))
             .unwrap_or(self.track);
 
         let mut start = grid.beat(pointer.x) - self.grab;

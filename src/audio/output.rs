@@ -16,7 +16,7 @@ where
     let stream = device.device().build_output_stream(
         *config,
         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            source.begin_buffer();
+            source.begin_buffer(data.len() / channels);
             write_frames(data, channels, || source.next_frame());
         },
         err_fn,

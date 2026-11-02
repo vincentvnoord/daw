@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use eframe::egui::{self, Popup, RichText, Sense};
 
 use crate::{
@@ -18,6 +20,7 @@ pub enum TrackAction {
     Select(usize),
     AddSynth,
     AddSample,
+    AddAudio,
     /// A placement was dropped somewhere new.
     MovePlacement {
         from: usize,
@@ -99,6 +102,10 @@ fn add_menu(ui: &mut egui::Ui) -> Option<TrackAction> {
                 action = Some(TrackAction::AddSample);
                 ui.close();
             }
+            if menu_option(ui, "Audio", "Monitor and record a live input") {
+                action = Some(TrackAction::AddAudio);
+                ui.close();
+            }
         });
 
     action
@@ -112,23 +119,37 @@ fn header(
     selected: bool,
 ) -> egui::Response {
     let output = track
-        .instrument
-        .params
-        .route
+        .route()
         .get_channel()
         .and_then(|id| project.channel(id))
         .map_or("no output", |c| c.name.as_str());
 
+    // an audio track names its input instead of its type, and lights up
+    // while you can hear it
+    let (details, color) = match (track.audio(), track.kind_label()) {
+        (Some(audio), _) => {
+            let input = audio.input.as_ref().map_or("no input", |i| i.name.as_str());
+            let monitoring = audio.params.enabled.load(Ordering::Relaxed);
+            let color = if monitoring {
+                theme::TEXT
+            } else {
+                theme::TEXT_DIM
+            };
+            (format!("{input} → {output}"), color)
+        }
+        (None, Some(kind)) => (format!("{kind} · → {output}"), theme::TEXT_DIM),
+        (None, None) => (format!("→ {output}"), theme::TEXT_DIM),
+    };
+
     list_card(ui, ("track", index), selected, |ui| {
         ui.label(RichText::new(&track.name).strong());
-        let details = match track.kind_label() {
-            Some(kind) => format!("{kind} · → {output}"),
-            None => format!("→ {output}"),
-        };
-        ui.label(
-            RichText::new(details)
-                .font(theme::value_font())
-                .color(theme::TEXT_DIM),
+        ui.add(
+            egui::Label::new(
+                RichText::new(details)
+                    .font(theme::value_font())
+                    .color(color),
+            )
+            .truncate(),
         );
     })
 }

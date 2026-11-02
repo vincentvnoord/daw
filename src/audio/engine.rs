@@ -1,13 +1,11 @@
 use std::error::Error;
 
 use cpal::{
-    BufferSize, HostId, SampleFormat, SupportedBufferSize,
+    SampleFormat,
     traits::{DeviceTrait, HostTrait, StreamTrait},
 };
 
-use crate::audio::{output::build_stream, source::StereoSource};
-
-const ALSA_BUFFER_SIZE: u32 = 1024;
+use crate::audio::{latency, output::build_stream, source::StereoSource};
 
 pub struct AudioDevice {
     device: cpal::Device,
@@ -16,7 +14,8 @@ pub struct AudioDevice {
 }
 
 impl AudioDevice {
-    /// The system's default output device, in its default config.
+    /// The system's default output device, in its default config but with
+    /// a small buffer, so what you play is heard quickly.
     pub fn open() -> Result<AudioDevice, Box<dyn Error>> {
         let host = cpal::default_host();
         let device = host
@@ -25,16 +24,22 @@ impl AudioDevice {
         let supported_config = device.default_output_config()?;
 
         let sample_format = supported_config.sample_format();
-        let buffer_size = match (host.id(), *supported_config.buffer_size()) {
-            #[cfg(target_os = "linux")]
-            (HostId::Alsa, SupportedBufferSize::Range { min, max }) => {
-                BufferSize::Fixed(ALSA_BUFFER_SIZE.clamp(min, max))
-            }
-            _ => BufferSize::Default,
-        };
-
+        let supported_buffer = *supported_config.buffer_size();
         let mut config: cpal::StreamConfig = supported_config.into();
-        config.buffer_size = buffer_size;
+        config.buffer_size = latency::buffer_size(&supported_buffer);
+
+        if latency::logging() {
+            let name = device
+                .description()
+                .map_or_else(|_| device.to_string(), |d| d.name().to_owned());
+            eprintln!(
+                "[latency] output: host {}, device {name}, {} Hz, {} channels, {sample_format}, buffer {:?} (supports {supported_buffer:?})",
+                host.id().name(),
+                config.sample_rate,
+                config.channels,
+                config.buffer_size,
+            );
+        }
 
         Ok(AudioDevice {
             device,

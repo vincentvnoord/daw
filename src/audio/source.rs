@@ -7,5 +7,6 @@ pub trait AudioSource: Send + 'static {
 
 pub trait StereoSource: Send + 'static {
     fn next_frame(&mut self) -> Frame;
-    fn begin_buffer(&mut self) {}
+    /// Called before each buffer of `frames` frames is asked for.
+    fn begin_buffer(&mut self, _frames: usize) {}
 }

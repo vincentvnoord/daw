@@ -1,7 +1,10 @@
 pub mod input;
 pub mod instrument;
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
+};
 
 use rtrb::{Consumer, Producer};
 
@@ -27,12 +30,24 @@ use crate::audio::{
 pub const MAX_INSTRUMENTS: usize = 64;
 pub const MAX_INPUTS: usize = 32;
 
+/// What the studio reports back about itself, for the latency log.
+#[derive(Default)]
+pub struct StudioStats {
+    /// Frames in the last buffer the output asked for.
+    pub buffer_frames: AtomicU32,
+}
+
 /// Changes the UI asks the studio to make while the audio is running.
 pub enum StudioCommand {
     AddChannel(Channel),
     RemoveChannel(ChannelId),
     AddInstrument(InstrumentSlot),
     AddInput(InputSlot),
+    /// Gives input slot `slot` another recording device to read from, or none.
+    SetInput {
+        slot: usize,
+        samples: Option<Consumer<f32>>,
+    },
     /// Replaces what plays along the transport.
     SetSchedule(Schedule),
 }
@@ -44,6 +59,7 @@ pub enum Garbage {
     Channel(Channel),
     Instrument(InstrumentSlot),
     Input(InputSlot),
+    InputQueue(Consumer<f32>),
     Schedule(Schedule),
 }
 
@@ -56,6 +72,7 @@ pub struct Studio {
     transport: Transport,
     metronome: Metronome,
     schedule: Schedule,
+    stats: Arc<StudioStats>,
 }
 
 impl Studio {
@@ -65,6 +82,7 @@ impl Studio {
         metronome_params: Arc<MetronomeParams>,
         commands: Consumer<StudioCommand>,
         garbage: Producer<Garbage>,
+        stats: Arc<StudioStats>,
         sample_rate: f32,
     ) -> Self {
         Self {
@@ -76,6 +94,7 @@ impl Studio {
             transport: Transport::new(transport_params, sample_rate as f64),
             metronome: Metronome::new(metronome_params, sample_rate),
             schedule: Schedule::empty(),
+            stats,
         }
     }
 
@@ -106,6 +125,16 @@ impl Studio {
                         self.discard(Garbage::Input(slot));
                     }
                 }
+                StudioCommand::SetInput { slot, samples } => {
+                    // with no such slot the new queue goes back unused
+                    let unused = match self.inputs.get_mut(slot) {
+                        Some(input) => input.set_input(samples),
+                        None => samples,
+                    };
+                    if let Some(queue) = unused {
+                        self.discard(Garbage::InputQueue(queue));
+                    }
+                }
                 StudioCommand::SetSchedule(mut schedule) => {
                     // the new schedule would never send the old one's note offs
                     self.release_scheduled();
@@ -132,8 +161,11 @@ impl Studio {
 }
 
 impl StereoSource for Studio {
-    fn begin_buffer(&mut self) {
+    fn begin_buffer(&mut self, frames: usize) {
         self.handle_commands();
+        self.stats
+            .buffer_frames
+            .store(frames as u32, Ordering::Relaxed);
 
         for slot in &mut self.instruments {
             slot.output = self.mixer.resolve(&slot.params.route);
@@ -142,10 +174,10 @@ impl StereoSource for Studio {
 
         for slot in &mut self.inputs {
             slot.output = self.mixer.resolve(&slot.params.route);
-            slot.begin_buffer();
+            slot.prepare(frames);
         }
 
-        self.mixer.begin_buffer();
+        self.mixer.begin_buffer(frames);
         self.transport.begin_buffer();
         self.metronome.begin_buffer();
 
