@@ -7,6 +7,13 @@ pub trait Instrument: AudioSource {
     fn note_off(&mut self, note: u8);
 }
 
+/// An instrument as the studio holds it: it makes sound and takes notes,
+/// whichever instrument is inside.
+pub trait NoteSource: AudioSource {
+    /// Plays or releases a note, starting from the next sample.
+    fn note(&mut self, event: NoteEvent);
+}
+
 pub struct InstrumentSource<I: Instrument> {
     notes: Consumer<NoteEvent>,
     instrument: I,
@@ -18,13 +25,21 @@ impl<I: Instrument> InstrumentSource<I> {
     }
 }
 
+impl<I: Instrument> NoteSource for InstrumentSource<I> {
+    fn note(&mut self, event: NoteEvent) {
+        match event {
+            NoteEvent::On(note) => self.instrument.note_on(note),
+            NoteEvent::Off(note) => self.instrument.note_off(note),
+        }
+    }
+}
+
 impl<I: Instrument> AudioSource for InstrumentSource<I> {
     fn begin_buffer(&mut self) {
-        while let Ok(ev) = self.notes.pop() {
-            match ev {
-                NoteEvent::On(note) => self.instrument.note_on(note),
-                NoteEvent::Off(note) => self.instrument.note_off(note),
-            }
+        // live notes from the keyboard land on the buffer's first sample;
+        // scheduled notes come in through `note` on their exact sample
+        while let Ok(event) = self.notes.pop() {
+            self.note(event);
         }
 
         self.instrument.begin_buffer();

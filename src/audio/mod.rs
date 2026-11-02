@@ -7,6 +7,7 @@ pub mod mixer;
 pub mod note;
 pub mod output;
 pub mod sampler;
+pub mod schedule;
 pub mod source;
 pub mod studio;
 pub mod synth;

@@ -11,6 +11,8 @@ use crate::audio::{
         Mixer, MixerParams,
         channel::{Channel, ChannelId},
     },
+    note::NoteEvent,
+    schedule::Schedule,
     source::{AudioSource, StereoSource},
     studio::{input::InputSlot, instrument::InstrumentSlot},
     transport::{
@@ -31,6 +33,8 @@ pub enum StudioCommand {
     RemoveChannel(ChannelId),
     AddInstrument(InstrumentSlot),
     AddInput(InputSlot),
+    /// Replaces what plays along the transport.
+    SetSchedule(Schedule),
 }
 
 /// Things the studio no longer uses. They go back to the UI thread to be
@@ -40,6 +44,7 @@ pub enum Garbage {
     Channel(Channel),
     Instrument(InstrumentSlot),
     Input(InputSlot),
+    Schedule(Schedule),
 }
 
 pub struct Studio {
@@ -50,6 +55,7 @@ pub struct Studio {
     garbage: Producer<Garbage>,
     transport: Transport,
     metronome: Metronome,
+    schedule: Schedule,
 }
 
 impl Studio {
@@ -69,6 +75,7 @@ impl Studio {
             garbage,
             transport: Transport::new(transport_params, sample_rate as f64),
             metronome: Metronome::new(metronome_params, sample_rate),
+            schedule: Schedule::empty(),
         }
     }
 
@@ -99,7 +106,21 @@ impl Studio {
                         self.discard(Garbage::Input(slot));
                     }
                 }
+                StudioCommand::SetSchedule(mut schedule) => {
+                    // the new schedule would never send the old one's note offs
+                    self.release_scheduled();
+                    schedule.seek(self.transport.position_in_beats());
+                    let old = std::mem::replace(&mut self.schedule, schedule);
+                    self.discard(Garbage::Schedule(old));
+                }
             }
+        }
+    }
+
+    /// Sends a note off for every scheduled note that is still sounding.
+    fn release_scheduled(&mut self) {
+        for (instrument, event) in self.schedule.release_all() {
+            play(&mut self.instruments, instrument, event);
         }
     }
 
@@ -127,9 +148,25 @@ impl StereoSource for Studio {
         self.mixer.begin_buffer();
         self.transport.begin_buffer();
         self.metronome.begin_buffer();
+
+        if self.transport.jumped() || self.transport.stopped() {
+            self.release_scheduled();
+        }
+        if self.transport.jumped() {
+            self.schedule.seek(self.transport.position_in_beats());
+        }
     }
 
     fn next_frame(&mut self) -> Frame {
+        // before the instruments make their sample, so each note starts on
+        // the sample its beat falls on
+        if self.transport.is_playing() {
+            let beat = self.transport.position_in_beats();
+            while let Some((instrument, event)) = self.schedule.next_due(beat) {
+                play(&mut self.instruments, instrument, event);
+            }
+        }
+
         for slot in &mut self.instruments {
             let sample = slot.source.next_sample();
             if let Some(ch) = slot.output {
@@ -153,5 +190,12 @@ impl StereoSource for Studio {
                 left: click,
                 right: click,
             }
+    }
+}
+
+/// Hands a note to the instrument in slot `instrument`, if there is one.
+fn play(instruments: &mut [InstrumentSlot], instrument: usize, event: NoteEvent) {
+    if let Some(slot) = instruments.get_mut(instrument) {
+        slot.source.note(event);
     }
 }
