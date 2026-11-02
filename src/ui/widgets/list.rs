@@ -1,5 +1,5 @@
-//! The pieces of the track list: clickable cards, the add menu
-//! under the + card, and the section title above each list.
+//! The pieces of the track list: clickable cards, the menu that drops
+//! down from one, and the section title above each list.
 
 use eframe::egui::{self, CornerRadius, CursorIcon, Margin, RichText, Sense, Stroke, StrokeKind};
 
@@ -61,16 +61,7 @@ pub fn list_card(
     response
 }
 
-/// The last card in a list, with a + that adds something.
-pub fn add_card(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug) -> egui::Response {
-    list_card(ui, id, false, |ui| {
-        ui.centered_and_justified(|ui| {
-            ui.label(RichText::new("+").size(20.0).color(theme::TEXT_DIM));
-        });
-    })
-}
-
-/// Frame for the menu that drops down from an add card.
+/// Frame for the menu that drops down from a card.
 pub fn menu_frame() -> egui::Frame {
     egui::Frame::new()
         .fill(theme::PANEL)

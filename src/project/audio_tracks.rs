@@ -10,16 +10,18 @@ use crate::{
             input::{InputParams, InputSlot, input_queue},
         },
     },
-    project::{Project, Track, TrackSource},
+    project::{Clip, Project, Track, TrackSource},
 };
 
-/// The UI's side of an audio track in the studio: its input slot, and the
-/// recording device it monitors, if one is chosen.
+/// The UI's side of an audio track in the studio: its input slot, the
+/// recording device it monitors, if one is chosen, and its clips.
 pub struct AudioHandle {
     /// Index of the track's input slot in the studio.
     pub slot: usize,
     pub params: Arc<InputParams>,
     pub input: Option<LiveInput>,
+    /// In no particular order, like placements.
+    pub clips: Vec<Clip>,
 }
 
 /// A recording device an audio track is listening to.
@@ -112,6 +114,7 @@ impl Project {
                 slot,
                 params,
                 input: None,
+                clips: Vec::new(),
             }),
             placements: Vec::new(),
         });

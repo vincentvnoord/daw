@@ -1,3 +1,4 @@
+pub mod clips;
 pub mod input;
 pub mod instrument;
 
@@ -17,7 +18,7 @@ use crate::audio::{
     note::NoteEvent,
     schedule::Schedule,
     source::{AudioSource, StereoSource},
-    studio::{input::InputSlot, instrument::InstrumentSlot},
+    studio::{clips::Clips, input::InputSlot, instrument::InstrumentSlot},
     transport::{
         Transport, TransportParams,
         metronome::{Metronome, MetronomeParams},
@@ -48,6 +49,11 @@ pub enum StudioCommand {
         slot: usize,
         samples: Option<Consumer<f32>>,
     },
+    /// Replaces the clips input slot `slot` plays.
+    SetClips {
+        slot: usize,
+        clips: Clips,
+    },
     /// Replaces what plays along the transport.
     SetSchedule(Schedule),
 }
@@ -60,6 +66,7 @@ pub enum Garbage {
     Instrument(InstrumentSlot),
     Input(InputSlot),
     InputQueue(Consumer<f32>),
+    Clips(Clips),
     Schedule(Schedule),
 }
 
@@ -135,6 +142,13 @@ impl Studio {
                         self.discard(Garbage::InputQueue(queue));
                     }
                 }
+                StudioCommand::SetClips { slot, clips } => {
+                    let old = match self.inputs.get_mut(slot) {
+                        Some(input) => input.set_clips(clips),
+                        None => clips,
+                    };
+                    self.discard(Garbage::Clips(old));
+                }
                 StudioCommand::SetSchedule(mut schedule) => {
                     // the new schedule would never send the old one's note offs
                     self.release_scheduled();
@@ -166,6 +180,8 @@ impl StereoSource for Studio {
         self.stats
             .buffer_frames
             .store(frames as u32, Ordering::Relaxed);
+        // first, so the clips see this buffer's tempo
+        self.transport.begin_buffer();
 
         for slot in &mut self.instruments {
             slot.output = self.mixer.resolve(&slot.params.route);
@@ -175,10 +191,10 @@ impl StereoSource for Studio {
         for slot in &mut self.inputs {
             slot.output = self.mixer.resolve(&slot.params.route);
             slot.prepare(frames);
+            slot.prepare_clips(&self.transport);
         }
 
         self.mixer.begin_buffer(frames);
-        self.transport.begin_buffer();
         self.metronome.begin_buffer();
 
         if self.transport.jumped() || self.transport.stopped() {
@@ -206,8 +222,15 @@ impl StereoSource for Studio {
             }
         }
 
+        let playhead = self
+            .transport
+            .is_playing()
+            .then(|| self.transport.position());
         for slot in &mut self.inputs {
-            let sample = slot.next_sample();
+            let mut sample = slot.next_sample();
+            if let Some(position) = playhead {
+                sample += slot.clip_sample(position);
+            }
             if let Some(ch) = slot.output {
                 self.mixer.add_input(ch, sample);
             }

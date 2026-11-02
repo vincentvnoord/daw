@@ -21,6 +21,7 @@ use crate::{
 
 mod audio_tracks;
 mod channels;
+mod clips;
 pub mod default;
 mod instruments;
 mod timeline;
@@ -28,6 +29,7 @@ mod tracks;
 
 pub use audio_tracks::{AudioHandle, InputDevice, input_devices};
 pub use channels::ChannelHandle;
+pub use clips::Clip;
 pub use instruments::{InstrumentHandle, InstrumentKind};
 pub use timeline::{Note, Placement, Sequence};
 pub use tracks::{Track, TrackSource};

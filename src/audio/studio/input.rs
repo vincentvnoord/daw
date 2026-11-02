@@ -10,6 +10,8 @@ use crate::{
     audio::{
         mixer::channel::{ChannelId, ChannelRoute},
         source::AudioSource,
+        studio::clips::Clips,
+        transport::Transport,
     },
 };
 
@@ -18,8 +20,9 @@ use crate::{
 pub const MAX_TRIM: f32 = 15.85;
 
 pub struct InputParams {
-    /// Whether the live input is silenced. It's heard through the channel
-    /// by default; muting is how you stop it.
+    /// Whether the track is silenced: its live input and its clips. The
+    /// input is heard through the channel by default; muting is how you stop
+    /// it.
     pub muted: AtomicBool,
     /// Gain applied to the input before it reaches its channel, from 1.0
     /// (as recorded) to `MAX_TRIM`.
@@ -44,13 +47,15 @@ impl InputParams {
 }
 
 /// An audio track in the studio: the live input it monitors, if it has one,
-/// playing into the track's channel.
+/// and its clips, playing into the track's channel.
 pub struct InputSlot {
     /// Samples from the recording device, or `None` with no input chosen.
     samples: Option<Consumer<f32>>,
+    clips: Clips,
     pub output: Option<usize>,
     /// The trim, or 0 while muted. Read once per buffer.
     gain: f32,
+    muted: bool,
     /// Samples the input ran dry on, copied to the params once per buffer.
     underruns: u32,
     /// Whether the input has sent anything yet. Before that, running dry is
@@ -78,8 +83,10 @@ impl InputSlot {
         let params = Arc::new(InputParams::new(channel));
         let slot = Self {
             samples: None,
+            clips: Clips::empty(),
             output: None,
             gain: 0.0,
+            muted: false,
             underruns: 0,
             started: false,
             params: Arc::clone(&params),
@@ -96,10 +103,33 @@ impl InputSlot {
         std::mem::replace(&mut self.samples, samples)
     }
 
+    /// Replaces the track's clips. Returns the old ones, to be dropped off
+    /// the audio thread.
+    pub fn set_clips(&mut self, clips: Clips) -> Clips {
+        std::mem::replace(&mut self.clips, clips)
+    }
+
+    /// Works out where the clips start at the transport's tempo. Once per
+    /// buffer, after the transport.
+    pub fn prepare_clips(&mut self, transport: &Transport) {
+        self.clips.prepare(transport);
+    }
+
+    /// The clips at sample `position` of the transport, or silence while
+    /// muted. Clips play as they are: the trim is for the live input.
+    pub fn clip_sample(&self, position: u64) -> f32 {
+        if self.muted {
+            0.0
+        } else {
+            self.clips.sample_at(position)
+        }
+    }
+
     /// Picks up the trim and mute, and throws away input that has
     /// piled up past what a buffer of `frames` frames needs.
     pub fn prepare(&mut self, frames: usize) {
-        self.gain = if self.params.muted.load(Ordering::Relaxed) {
+        self.muted = self.params.muted.load(Ordering::Relaxed);
+        self.gain = if self.muted {
             0.0
         } else {
             self.params.trim.get()

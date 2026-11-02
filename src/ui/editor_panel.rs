@@ -20,19 +20,22 @@ enum OutputChoice {
 
 /// The selected track as one panel: a header with the track's name, its type
 /// and the output channel, and its controls underneath: the instrument's for
-/// an instrument track, the input's for an audio track. `devices` is the
-/// list of recording devices offered for an audio track's input.
+/// an instrument track, the input's and clips' for an audio track. `devices`
+/// is the list of recording devices offered for an audio track's input.
+/// Returns `true` when asked to add a clip to the track; the file dialog is
+/// the app's to open, after drawing.
 pub fn show(
     ui: &mut egui::Ui,
     project: &mut Project,
     active: usize,
     devices: &mut Vec<InputDevice>,
-) {
+) -> bool {
     let Some(track) = project.tracks.get(active) else {
-        return;
+        return false;
     };
     let mut choice = None;
     let mut input = None;
+    let mut add_clip = false;
 
     egui::Frame::new()
         .fill(theme::PANEL)
@@ -49,7 +52,10 @@ pub fn show(
                 let layout = Layout::left_to_right(Align::Min).with_main_wrap(true);
                 ui.with_layout(layout, |ui| match &track.source {
                     TrackSource::Instrument(instrument) => instrument_controls(ui, instrument),
-                    TrackSource::Audio(audio) => input = audio_controls(ui, audio, devices),
+                    TrackSource::Audio(audio) => {
+                        input = audio_controls(ui, audio, devices);
+                        add_clip = clip_controls(ui, audio);
+                    }
                 });
             });
         });
@@ -74,6 +80,8 @@ pub fn show(
             eprintln!("failed to open {name}: {err}");
         }
     }
+
+    add_clip
 }
 
 fn header(ui: &mut egui::Ui, track: &Track, project: &Project, choice: &mut Option<OutputChoice>) {
@@ -184,4 +192,24 @@ fn audio_controls(
     });
 
     picked
+}
+
+/// How many clips the track has, and a button to add one at the playhead.
+/// Returns `true` when the button is clicked.
+fn clip_controls(ui: &mut egui::Ui, audio: &AudioHandle) -> bool {
+    let mut add = false;
+
+    card(ui, "Clips", |ui| {
+        let count = match audio.clips.len() {
+            1 => "1 clip".to_owned(),
+            n => format!("{n} clips"),
+        };
+        ui.label(RichText::new(count).font(theme::value_font()));
+        add = ui
+            .button("Add WAV…")
+            .on_hover_text("Place a WAV file at the playhead")
+            .clicked();
+    });
+
+    add
 }

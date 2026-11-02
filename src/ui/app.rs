@@ -1,9 +1,9 @@
-use std::{collections::BTreeSet, time::Instant};
+use std::{collections::BTreeSet, path::PathBuf, sync::atomic::Ordering, time::Instant};
 
 use eframe::egui::{self, RichText};
 
 use crate::{
-    audio::{latency, note::NoteEvent},
+    audio::{latency, note::NoteEvent, transport::beats_at},
     project::{InputDevice, Project, Track},
     ui::{
         editor_panel,
@@ -65,14 +65,7 @@ impl App {
 
     /// Asks for a WAV file and adds a track with a sampler that plays it.
     fn add_sample(&mut self) {
-        let mut dialog = rfd::FileDialog::new()
-            .set_title("Add sample")
-            .add_filter("WAV audio", &["wav"]);
-        if let Ok(dir) = std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/testsamples"))
-        {
-            dialog = dialog.set_directory(dir);
-        }
-        let Some(path) = dialog.pick_file() else {
+        let Some(path) = pick_wav("Add sample") else {
             return;
         };
 
@@ -80,6 +73,21 @@ impl App {
             Ok(Some(index)) => self.set_active(index),
             Ok(None) => eprintln!("can't add more tracks"),
             Err(err) => eprintln!("failed to load {}: {err}", path.display()),
+        }
+    }
+
+    /// Asks for a WAV file and places it on the selected audio track, at the
+    /// beat the playhead is in.
+    fn add_clip(&mut self) {
+        let Some(path) = pick_wav("Add clip") else {
+            return;
+        };
+
+        let samples = self.project.transport.position.load(Ordering::Relaxed);
+        let bpm = self.project.transport.bpm.get() as f64;
+        let start = beats_at(samples, bpm, self.project.sample_rate as f64).floor();
+        if let Err(err) = self.project.add_clip(self.active, &path, start) {
+            eprintln!("failed to load {}: {err}", path.display());
         }
     }
 
@@ -187,6 +195,7 @@ impl eframe::App for App {
             .show(ui, |ui| self.mixer_panel.show(ui, &mut self.project));
 
         let mut track_action = None;
+        let mut add_clip = false;
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(16))
             .show(ui, |ui| {
@@ -200,14 +209,20 @@ impl eframe::App for App {
                             self.piano_roll = None;
                         }
                     }
-                    None => editor_panel::show(
-                        ui,
-                        &mut self.project,
-                        self.active,
-                        &mut self.input_devices,
-                    ),
+                    None => {
+                        add_clip = editor_panel::show(
+                            ui,
+                            &mut self.project,
+                            self.active,
+                            &mut self.input_devices,
+                        );
+                    }
                 }
             });
+
+        if add_clip {
+            self.add_clip();
+        }
 
         // handled after drawing, so the file dialog doesn't open mid-frame
         match track_action {
@@ -229,6 +244,24 @@ impl eframe::App for App {
                 to,
                 start,
             }) => self.project.move_placement(from, index, to, start),
+            Some(TrackAction::MoveClip {
+                from,
+                index,
+                to: Some(to),
+                start,
+            }) => self.project.move_clip(from, index, to, start),
+            // dropped on the empty track: it becomes an audio track first
+            Some(TrackAction::MoveClip {
+                from,
+                index,
+                to: None,
+                start,
+            }) => {
+                if let Some(to) = self.project.add_audio_track() {
+                    self.project.move_clip(from, index, to, start);
+                    self.set_active(to);
+                }
+            }
             Some(TrackAction::OpenSequence { track, sequence }) => {
                 self.set_active(track);
                 self.piano_roll = Some(PianoRoll::new(sequence, track));
@@ -239,4 +272,16 @@ impl eframe::App for App {
         // keep redrawing so the meters move without mouse input
         ui.ctx().request_repaint();
     }
+}
+
+/// Asks for a WAV file, starting in the test samples folder when there is
+/// one. `None` when the dialog is cancelled.
+fn pick_wav(title: &str) -> Option<PathBuf> {
+    let mut dialog = rfd::FileDialog::new()
+        .set_title(title)
+        .add_filter("WAV audio", &["wav"]);
+    if let Ok(dir) = std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/testsamples")) {
+        dialog = dialog.set_directory(dir);
+    }
+    dialog.pick_file()
 }

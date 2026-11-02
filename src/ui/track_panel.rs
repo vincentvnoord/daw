@@ -10,7 +10,7 @@ use crate::{
         timeline::{RULER_HEIGHT, Timeline},
         widgets::{
             icon_button::{Icon, IconButton},
-            list::{add_card, list_card, menu_frame, menu_option, section_label},
+            list::{list_card, menu_frame, menu_option, section_label},
         },
     },
 };
@@ -35,6 +35,15 @@ pub enum TrackAction {
         to: usize,
         start: f64,
     },
+    /// A clip was dropped somewhere new.
+    MoveClip {
+        from: usize,
+        index: usize,
+        /// The track it was dropped on, or `None` for the empty track at the
+        /// bottom, which becomes a new audio track.
+        to: Option<usize>,
+        start: f64,
+    },
     /// A placement was double-clicked: open its sequence in the piano roll.
     OpenSequence {
         track: usize,
@@ -45,8 +54,10 @@ pub enum TrackAction {
 /// The tracks with the timeline: a column of headers with the name, the
 /// instrument type and the channel each track plays into, and next to it the
 /// lanes with what each track plays. Clicking a header selects the track:
-/// the keyboard plays it and the editor shows its instrument. A last card
-/// with a + adds a track.
+/// the keyboard plays it and the editor shows its instrument. Below the last
+/// track is an empty one, which isn't in the project: clicking its header
+/// picks a source for it, and dropping a clip on its lane makes it an audio
+/// track.
 pub fn show(
     ui: &mut egui::Ui,
     project: &Project,
@@ -75,10 +86,13 @@ pub fn show(
                 }
             }
 
-            if project.tracks.len() < MAX_INSTRUMENTS
-                && let Some(added) = add_menu(ui)
-            {
-                action = Some(added);
+            // its height goes in too, so the timeline draws a lane next to it
+            if project.tracks.len() < MAX_INSTRUMENTS {
+                let (height, added) = empty_header(ui);
+                row_heights.push(height);
+                if let Some(added) = added {
+                    action = Some(added);
+                }
             }
         });
 
@@ -90,10 +104,16 @@ pub fn show(
     action
 }
 
-/// The + card under the headers, with its menu of track types.
-fn add_menu(ui: &mut egui::Ui) -> Option<TrackAction> {
+/// The empty track's header under the others, with its menu of sources.
+/// Returns its height and what was picked, if anything.
+fn empty_header(ui: &mut egui::Ui) -> (f32, Option<TrackAction>) {
     let mut action = None;
-    let add = add_card(ui, "add_track").on_hover_text("Add track");
+    let add = list_card(ui, "empty_track", false, |ui| {
+        ui.centered_and_justified(|ui| {
+            ui.label(RichText::new("+").size(20.0).color(theme::TEXT_DIM));
+        });
+    })
+    .on_hover_text("Add track, or drop a clip on its lane");
 
     Popup::menu(&add)
         .width(add.rect.width())
@@ -115,7 +135,7 @@ fn add_menu(ui: &mut egui::Ui) -> Option<TrackAction> {
             }
         });
 
-    action
+    (add.rect.height(), action)
 }
 
 fn header(

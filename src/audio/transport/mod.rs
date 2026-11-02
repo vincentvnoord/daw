@@ -116,6 +116,17 @@ impl Transport {
         beats_at(self.position, self.bpm, self.sample_rate)
     }
 
+    /// Where the playhead is, in samples.
+    pub fn position(&self) -> u64 {
+        self.position
+    }
+
+    /// The first sample at or after `beat` at this tempo, the one something
+    /// starting on that beat starts on.
+    pub fn sample_at(&self, beat: f64) -> u64 {
+        (beat * 60.0 / self.bpm * self.sample_rate).ceil() as u64
+    }
+
     /// The index of the beat that starts at the current sample, if one does.
     /// Stopped, the position doesn't move, so no beat starts.
     pub fn beat_starting_now(&self) -> Option<u64> {
