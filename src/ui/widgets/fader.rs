@@ -4,7 +4,7 @@ use eframe::egui::{
     self, Align2, CornerRadius, CursorIcon, Rect, Sense, Stroke, StrokeKind, pos2, vec2,
 };
 
-use crate::helpers::AtomicF32;
+use crate::atomic::AtomicF32;
 use crate::ui::{
     theme,
     widgets::value::{Mapping, Unit},
@@ -60,10 +60,10 @@ impl egui::Widget for Fader<'_> {
             && (response.dragged() || response.clicked())
         {
             let t = 1.0 - (pos.y - track.top()) / track.height();
-            self.param.set(self.mapping.from_normalized(t));
+            self.param.set(self.mapping.denormalize(t));
             response.mark_changed();
         }
-        let t = self.mapping.to_normalized(self.param.get());
+        let t = self.mapping.normalize(self.param.get());
 
         if ui.is_rect_visible(rect) {
             let painter = ui.painter();

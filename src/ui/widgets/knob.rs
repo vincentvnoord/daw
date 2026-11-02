@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 
 use eframe::egui::{self, Align2, CursorIcon, Sense, Shape, Stroke, Vec2, pos2, vec2};
 
-use crate::helpers::AtomicF32;
+use crate::atomic::AtomicF32;
 use crate::ui::{
     theme,
     widgets::value::{Mapping, Unit},
@@ -64,14 +64,14 @@ impl egui::Widget for Knob<'_> {
         response = response.on_hover_cursor(CursorIcon::ResizeVertical);
 
         let mapping = Mapping::new(self.range, self.log);
-        let mut t = mapping.to_normalized(self.param.get());
+        let mut t = mapping.normalize(self.param.get());
         if response.dragged() {
             let fine = ui.input(|i| i.modifiers.shift);
             let speed = if fine { DRAG_SPEED * 0.2 } else { DRAG_SPEED };
             let new_t = (t - response.drag_delta().y * speed).clamp(0.0, 1.0);
             if new_t != t {
                 t = new_t;
-                self.param.set(mapping.from_normalized(t));
+                self.param.set(mapping.denormalize(t));
                 response.mark_changed();
             }
         }

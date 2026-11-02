@@ -6,11 +6,11 @@ use std::sync::{
 use rtrb::{Consumer, Producer, RingBuffer};
 
 use crate::{
+    atomic::AtomicF32,
     audio::{
         mixer::channel::{ChannelId, ChannelRoute},
         source::AudioSource,
     },
-    helpers::AtomicF32,
 };
 
 /// Most an input can be boosted: +24 dB, enough to bring a guitar or mic
@@ -70,10 +70,10 @@ impl AudioSource for InputSlot {
         };
 
         let backlog = self.samples.slots();
-        if backlog > MAX_BACKLOG {
-            if let Ok(chunk) = self.samples.read_chunk(backlog - MAX_BACKLOG) {
-                chunk.commit_all();
-            }
+        if backlog > MAX_BACKLOG
+            && let Ok(chunk) = self.samples.read_chunk(backlog - MAX_BACKLOG)
+        {
+            chunk.commit_all();
         }
     }
 

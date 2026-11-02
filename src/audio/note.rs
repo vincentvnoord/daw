@@ -1,27 +1,11 @@
-#[allow(dead_code)]
-pub enum Note {
-    C,
-    Cs,
-    D,
-    Ds,
-    E,
-    F,
-    Fs,
-    G,
-    Gs,
-    A,
-    As,
-    B,
-}
-
-pub fn note_to_midi(note: Note, octave: i32) -> u8 {
-    ((octave + 1) * 12 + note as i32) as u8
-}
-
+/// Frequency in Hz of a MIDI note number, with A4 (69) at 440 Hz.
 pub fn midi_to_freq(note: u8) -> f32 {
     440.0 * 2f32.powf((note as f32 - 69.0) / 12.0)
 }
 
-pub fn note_to_freq(note: Note, octave: i32) -> f32 {
-    midi_to_freq(note_to_midi(note, octave))
+/// A key pressed or released, by MIDI note number.
+#[derive(Clone, Copy, Debug)]
+pub enum NoteEvent {
+    On(u8),
+    Off(u8),
 }

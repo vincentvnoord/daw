@@ -7,11 +7,11 @@ pub mod voice;
 use crate::audio::dsp::filter::LowPassFilter;
 use crate::audio::instrument::Instrument;
 
+use crate::atomic::AtomicF32;
 use crate::audio::source::AudioSource;
 use crate::audio::synth::envelope::{Envelope, EnvelopeSettings};
 use crate::audio::synth::osc::{AtomicWaveForm, Oscillator, WaveForm};
 use crate::audio::synth::voice::Voice;
-use crate::helpers::AtomicF32;
 
 pub struct SynthParams {
     pub waveform: AtomicWaveForm,

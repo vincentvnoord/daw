@@ -48,7 +48,7 @@ impl Mapping {
         Self { min, max, log }
     }
 
-    pub fn to_normalized(&self, v: f32) -> f32 {
+    pub fn normalize(&self, v: f32) -> f32 {
         let v = v.clamp(self.min, self.max);
         let t = if self.log {
             (v / self.min).ln() / (self.max / self.min).ln()
@@ -58,7 +58,7 @@ impl Mapping {
         t.clamp(0.0, 1.0)
     }
 
-    pub fn from_normalized(&self, t: f32) -> f32 {
+    pub fn denormalize(&self, t: f32) -> f32 {
         let t = t.clamp(0.0, 1.0);
         if self.log {
             self.min * (self.max / self.min).powf(t)

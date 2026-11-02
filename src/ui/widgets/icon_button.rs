@@ -110,7 +110,10 @@ fn shapes(icon: Icon, r: Rect, color: Color32) -> Vec<Shape> {
             vec![
                 Shape::closed_line(body, stroke),
                 Shape::line_segment(
-                    [r.center_bottom(), pos2(r.right(), r.top() + r.height() * 0.15)],
+                    [
+                        r.center_bottom(),
+                        pos2(r.right(), r.top() + r.height() * 0.15),
+                    ],
                     stroke,
                 ),
             ]

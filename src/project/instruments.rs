@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use rtrb::Producer;
 
-use crate::{
-    audio::{studio::instrument::InstrumentParams, synth::SynthParams},
-    events::NoteEvent,
-};
+use crate::audio::{note::NoteEvent, studio::instrument::InstrumentParams, synth::SynthParams};
 
 /// The UI's side of an instrument in the studio. Every instrument belongs to
 /// exactly one track.

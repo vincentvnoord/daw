@@ -7,8 +7,8 @@ use std::{
 };
 
 use crate::{
+    atomic::AtomicF32,
     audio::{frame::Frame, mixer::meter::Meter},
-    helpers::AtomicF32,
 };
 
 /// Gain and pan a new channel starts with.
@@ -119,6 +119,34 @@ impl Channel {
     }
 }
 
+const NO_CHANNEL: u32 = u32::MAX;
+
+/// Which channel something plays into, by id. The UI changes it while audio
+/// runs; the studio resolves it to a mixer index once per buffer.
+pub struct ChannelRoute(AtomicU32);
+
+impl ChannelRoute {
+    pub fn new(channel: Option<ChannelId>) -> Self {
+        Self(AtomicU32::new(
+            channel.map_or(NO_CHANNEL, ChannelId::to_raw),
+        ))
+    }
+
+    pub fn set_channel(&self, channel: Option<ChannelId>) {
+        self.0.store(
+            channel.map_or(NO_CHANNEL, ChannelId::to_raw),
+            Ordering::Relaxed,
+        );
+    }
+
+    pub fn get_channel(&self) -> Option<ChannelId> {
+        match self.0.load(Ordering::Relaxed) {
+            NO_CHANNEL => None,
+            raw => Some(ChannelId::from_raw(raw)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::f32::consts::FRAC_1_SQRT_2;
@@ -146,32 +174,6 @@ mod tests {
         for pan in [-1.0, -0.6, -0.25, 0.0, 0.3, 0.75, 1.0] {
             let (l, r) = Channel::pan_gains(pan);
             assert!(close(l * l + r * r, 1.0), "pan {pan}: {}", l * l + r * r);
-        }
-    }
-}
-
-const NO_CHANNEL: u32 = u32::MAX;
-
-pub struct ChannelRoute(AtomicU32);
-
-impl ChannelRoute {
-    pub fn new(channel: Option<ChannelId>) -> Self {
-        Self {
-            0: AtomicU32::new(channel.map_or(NO_CHANNEL, ChannelId::to_raw)),
-        }
-    }
-
-    pub fn set_channel(&self, channel: Option<ChannelId>) {
-        self.0.store(
-            channel.map_or(NO_CHANNEL, ChannelId::to_raw),
-            Ordering::Relaxed,
-        );
-    }
-
-    pub fn get_channel(&self) -> Option<ChannelId> {
-        match self.0.load(Ordering::Relaxed) {
-            NO_CHANNEL => None,
-            raw => Some(ChannelId::from_raw(raw)),
         }
     }
 }

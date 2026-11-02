@@ -2,7 +2,7 @@ use std::ops::RangeInclusive;
 
 use eframe::egui::{self, Key};
 
-use crate::events::NoteEvent;
+use crate::audio::note::NoteEvent;
 
 /// Notes reachable from the computer keyboard.
 pub const NOTE_RANGE: RangeInclusive<u8> = 48..=76;

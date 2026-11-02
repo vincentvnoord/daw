@@ -1,9 +1,9 @@
 use eframe::egui::{self, Align, Layout, RichText};
 
 use crate::{
+    atomic::AtomicF32,
     audio::mixer::{MAX_CHANNELS, meter},
-    helpers::AtomicF32,
-    shared::AppParams,
+    project::Project,
     ui::{
         theme,
         widgets::{fader::Fader, knob::Knob, meter::Meter, value::Unit},
@@ -30,10 +30,10 @@ pub struct MixerPanel {
 impl MixerPanel {
     /// Draws the mixer across the full width: one strip per channel, a button
     /// to add a channel, and the master strip on the right.
-    pub fn show(&mut self, ui: &mut egui::Ui, params: &mut AppParams) {
+    pub fn show(&mut self, ui: &mut egui::Ui, project: &mut Project) {
         let dt = ui.input(|i| i.stable_dt);
         let fall = 10f32.powf(-FALL_DB_PER_SEC * dt / 20.0);
-        self.levels.resize(params.channels.len(), 0.0);
+        self.levels.resize(project.channels.len(), 0.0);
 
         let mut add_channel = false;
         let mut remove_channel = None;
@@ -44,7 +44,7 @@ impl MixerPanel {
                 .show(ui, |ui| {
                     ui.horizontal_top(|ui| {
                         for (i, (channel, level)) in
-                            params.channels.iter().zip(&mut self.levels).enumerate()
+                            project.channels.iter().zip(&mut self.levels).enumerate()
                         {
                             *level = next_level(&channel.params.meter, *level, fall);
                             let params = &channel.params;
@@ -58,7 +58,7 @@ impl MixerPanel {
                         let add =
                             egui::Button::new(RichText::new("+").size(20.0).color(theme::TEXT_DIM))
                                 .min_size(egui::vec2(44.0, height));
-                        let can_add = params.channels.len() < MAX_CHANNELS;
+                        let can_add = project.channels.len() < MAX_CHANNELS;
                         if ui
                             .add_enabled(can_add, add)
                             .on_hover_text("Add channel")
@@ -70,13 +70,13 @@ impl MixerPanel {
                 });
 
             ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                self.master_level = next_level(&params.mixer.meter, self.master_level, fall);
+                self.master_level = next_level(&project.mixer.meter, self.master_level, fall);
                 if self.master_level > 1.0 {
                     self.clipped = true;
                 }
 
                 ui.vertical(|ui| {
-                    strip(ui, "Master", &params.mixer.gain, None, self.master_level);
+                    strip(ui, "Master", &project.mixer.gain, None, self.master_level);
 
                     let clip =
                         egui::Button::new(RichText::new("CLIP").font(theme::label_font()).color(
@@ -99,10 +99,10 @@ impl MixerPanel {
         });
 
         if add_channel {
-            params.add_channel(params.next_channel_name());
+            project.add_channel(project.next_channel_name());
         }
         if let Some((index, id)) = remove_channel {
-            params.remove_channel(id);
+            project.remove_channel(id);
             self.levels.remove(index);
         }
     }

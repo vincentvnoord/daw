@@ -4,6 +4,7 @@ pub mod channel;
 pub mod meter;
 
 use crate::{
+    atomic::AtomicF32,
     audio::{
         frame::Frame,
         mixer::{
@@ -12,7 +13,6 @@ use crate::{
         },
         source::StereoSource,
     },
-    helpers::AtomicF32,
 };
 
 /// Most channels the mixer can hold. Space for all of them is reserved up
@@ -93,5 +93,83 @@ impl StereoSource for Mixer {
         self.peak = self.peak.max(out.left.abs().max(out.right.abs()));
 
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f32::consts::FRAC_1_SQRT_2;
+
+    use super::*;
+
+    fn mixer_with(channels: usize) -> (Mixer, Vec<ChannelId>) {
+        let mut mixer = Mixer::new(Arc::new(MixerParams {
+            gain: AtomicF32::new(1.0),
+            meter: Meter::new(),
+        }));
+        let ids = (0..channels)
+            .map(|_| {
+                let (channel, params) = Channel::create(1.0);
+                assert!(mixer.add(channel).is_ok());
+                params.id
+            })
+            .collect();
+
+        (mixer, ids)
+    }
+
+    #[test]
+    fn route_follows_its_channel_when_an_earlier_one_is_removed() {
+        let (mut mixer, ids) = mixer_with(3);
+        let route = ChannelRoute::new(Some(ids[2]));
+        assert_eq!(mixer.resolve(&route), Some(2));
+
+        assert!(mixer.remove(ids[0]).is_some());
+
+        assert_eq!(mixer.resolve(&route), Some(1));
+    }
+
+    #[test]
+    fn route_to_a_removed_channel_goes_nowhere() {
+        let (mut mixer, ids) = mixer_with(2);
+        let route = ChannelRoute::new(Some(ids[1]));
+
+        assert!(mixer.remove(ids[1]).is_some());
+
+        assert_eq!(mixer.resolve(&route), None);
+    }
+
+    #[test]
+    fn full_mixer_gives_the_channel_back() {
+        let (mut mixer, _) = mixer_with(MAX_CHANNELS);
+        let (channel, _) = Channel::create(1.0);
+
+        assert!(mixer.add(channel).is_err());
+    }
+
+    #[test]
+    fn inputs_are_summed_into_the_mix() {
+        let (mut mixer, _) = mixer_with(2);
+        mixer.begin_buffer();
+
+        mixer.add_input(0, 0.25);
+        mixer.add_input(0, 0.25);
+        mixer.add_input(1, 0.5);
+        let frame = mixer.next_frame();
+
+        // centred, each side gets 1/sqrt(2) of the mono signal
+        assert!((frame.left - FRAC_1_SQRT_2).abs() < 1e-6);
+        assert!((frame.right - FRAC_1_SQRT_2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn inputs_are_cleared_after_each_frame() {
+        let (mut mixer, _) = mixer_with(1);
+        mixer.begin_buffer();
+
+        mixer.add_input(0, 1.0);
+        mixer.next_frame();
+
+        assert_eq!(mixer.next_frame().left, 0.0);
     }
 }

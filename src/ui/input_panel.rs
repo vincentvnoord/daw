@@ -3,8 +3,8 @@ use std::sync::atomic::Ordering;
 use eframe::egui::{self, Popup, RichText};
 
 use crate::{
-    audio::studio::{input::MAX_TRIM, studio::MAX_INPUTS},
-    shared::{AppParams, InputDevice, InputHandle, input_devices},
+    audio::studio::{MAX_INPUTS, input::MAX_TRIM},
+    project::{InputDevice, InputHandle, Project, input_devices},
     ui::{
         theme,
         widgets::{
@@ -28,16 +28,16 @@ impl InputPanel {
     /// the channel it plays into. A last card with a + adds a device.
     ///
     /// Returns the device to add, if one was picked.
-    pub fn show(&mut self, ui: &mut egui::Ui, params: &AppParams) -> Option<InputDevice> {
+    pub fn show(&mut self, ui: &mut egui::Ui, project: &Project) -> Option<InputDevice> {
         let mut picked = None;
 
         section_label(ui, "INPUTS");
 
-        for (i, input) in params.inputs.iter().enumerate() {
-            input_card(ui, i, input, params);
+        for (i, input) in project.inputs.iter().enumerate() {
+            input_card(ui, i, input, project);
         }
 
-        if params.inputs.len() < MAX_INPUTS {
+        if project.inputs.len() < MAX_INPUTS {
             let add = add_card(ui, "add_input").on_hover_text("Add input");
             if add.clicked() {
                 self.devices = input_devices();
@@ -68,11 +68,11 @@ impl InputPanel {
 }
 
 /// One input: its name, whether it's on, and where it plays into.
-fn input_card(ui: &mut egui::Ui, index: usize, input: &InputHandle, params: &AppParams) {
+fn input_card(ui: &mut egui::Ui, index: usize, input: &InputHandle, project: &Project) {
     let enabled = input.params.enabled.load(Ordering::Relaxed);
     let current = input.params.route.get_channel();
     let output = current
-        .and_then(|id| params.channel(id))
+        .and_then(|id| project.channel(id))
         .map_or("no output", |c| c.name.as_str());
 
     let response = list_card(ui, ("input", index), enabled, |ui| {
@@ -105,7 +105,7 @@ fn input_card(ui: &mut egui::Ui, index: usize, input: &InputHandle, params: &App
                 .font(theme::label_font())
                 .color(theme::TEXT_DIM),
         );
-        for channel in &params.channels {
+        for channel in &project.channels {
             let id = channel.id();
             if ui
                 .selectable_label(current == Some(id), &channel.name)

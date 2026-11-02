@@ -1,7 +1,6 @@
 use rtrb::Consumer;
 
-use crate::audio::source::AudioSource;
-use crate::events::NoteEvent;
+use crate::audio::{note::NoteEvent, source::AudioSource};
 
 pub trait Instrument: AudioSource {
     fn note_on(&mut self, note: u8);

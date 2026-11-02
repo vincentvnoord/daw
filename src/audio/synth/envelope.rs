@@ -87,3 +87,66 @@ impl Envelope {
         self.value
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // at 4 samples per second, a quarter-second step is one sample, so the
+    // ramps land on exact values
+    const SAMPLE_RATE: f32 = 4.0;
+
+    fn envelope() -> Envelope {
+        let settings = EnvelopeSettings {
+            attack: 1.0,
+            decay: 1.0,
+            sustain: 0.5,
+            release: 1.0,
+        };
+        Envelope::new(settings, SAMPLE_RATE)
+    }
+
+    fn run(envelope: &mut Envelope, samples: usize) -> f32 {
+        (0..samples).map(|_| envelope.next_value()).last().unwrap()
+    }
+
+    #[test]
+    fn silent_until_triggered() {
+        let mut envelope = envelope();
+
+        assert_eq!(run(&mut envelope, 10), 0.0);
+        assert!(envelope.is_idle());
+    }
+
+    #[test]
+    fn attack_ramps_up_to_full() {
+        let mut envelope = envelope();
+        envelope.trigger();
+
+        assert_eq!(run(&mut envelope, 2), 0.5);
+        assert_eq!(run(&mut envelope, 2), 1.0);
+        assert!(matches!(envelope.state(), State::Decay));
+    }
+
+    #[test]
+    fn decay_settles_on_sustain() {
+        let mut envelope = envelope();
+        envelope.trigger();
+        run(&mut envelope, 4);
+
+        assert_eq!(run(&mut envelope, 4), 0.5);
+        assert!(matches!(envelope.state(), State::Sustain));
+        assert_eq!(run(&mut envelope, 100), 0.5);
+    }
+
+    #[test]
+    fn release_fades_to_idle() {
+        let mut envelope = envelope();
+        envelope.trigger();
+        run(&mut envelope, 8);
+        envelope.release();
+
+        assert_eq!(run(&mut envelope, 2), 0.0);
+        assert!(envelope.is_idle());
+    }
+}

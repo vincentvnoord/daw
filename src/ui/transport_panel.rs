@@ -4,7 +4,7 @@ use eframe::egui::{self, RichText};
 
 use crate::{
     audio::transport::{MAX_BPM, MIN_BPM, beats_at, metronome::BEATS_PER_BAR},
-    shared::AppParams,
+    project::Project,
     ui::{
         theme,
         widgets::{
@@ -17,8 +17,8 @@ use crate::{
 
 /// Play and rewind buttons, the tempo, where the playhead is, and the
 /// metronome switch. Sized to sit in the header bar.
-pub fn show(ui: &mut egui::Ui, params: &AppParams) {
-    let transport = &params.transport;
+pub fn show(ui: &mut egui::Ui, project: &Project) {
+    let transport = &project.transport;
 
     if ui
         .add(IconButton::new(Icon::Rewind))
@@ -43,7 +43,7 @@ pub fn show(ui: &mut egui::Ui, params: &AppParams) {
     }
 
     ui.add_space(theme::GAP);
-    position(ui, params);
+    position(ui, project);
     ui.add_space(theme::GAP);
 
     let mut bpm = transport.bpm.get();
@@ -58,7 +58,7 @@ pub fn show(ui: &mut egui::Ui, params: &AppParams) {
 
     ui.add_space(theme::GAP);
 
-    let metronome = &params.metronome;
+    let metronome = &project.metronome;
     let enabled = metronome.enabled.load(Ordering::Relaxed);
     let response = ui
         .add(IconButton::new(Icon::Metronome).selected(enabled))
@@ -70,15 +70,20 @@ pub fn show(ui: &mut egui::Ui, params: &AppParams) {
 
     // the volume is an atomic, so it can be changed right here
     response.context_menu(|ui| {
-        ui.add(Knob::new(&metronome.volume, 0.0..=1.0, "Volume", Unit::Percent));
+        ui.add(Knob::new(
+            &metronome.volume,
+            0.0..=1.0,
+            "Volume",
+            Unit::Percent,
+        ));
     });
 }
 
 /// The playhead as bar.beat, and as minutes and seconds.
-fn position(ui: &mut egui::Ui, params: &AppParams) {
-    let samples = params.transport.position.load(Ordering::Relaxed);
-    let bpm = params.transport.bpm.get() as f64;
-    let sample_rate = params.sample_rate as f64;
+fn position(ui: &mut egui::Ui, project: &Project) {
+    let samples = project.transport.position.load(Ordering::Relaxed);
+    let bpm = project.transport.bpm.get() as f64;
+    let sample_rate = project.sample_rate as f64;
 
     let beats = beats_at(samples, bpm, sample_rate).floor() as u64;
     let bar = beats / BEATS_PER_BAR + 1;

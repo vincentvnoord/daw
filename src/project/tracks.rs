@@ -4,13 +4,10 @@ use crate::{
     audio::{
         instrument::Instrument,
         sampler::{Sampler, VOICES as SAMPLER_VOICES, sample::Sample},
-        studio::{
-            instrument::InstrumentSlot,
-            studio::{MAX_INSTRUMENTS, StudioCommand},
-        },
+        studio::{MAX_INSTRUMENTS, StudioCommand, instrument::InstrumentSlot},
         synth::Synth,
     },
-    shared::{AppParams, InstrumentHandle, InstrumentKind, unique_name},
+    project::{InstrumentHandle, InstrumentKind, Project, unique_name},
 };
 
 /// A row on the timeline: one instrument of its own, playing into a mixer
@@ -29,7 +26,7 @@ impl Track {
     }
 }
 
-impl AppParams {
+impl Project {
     /// Adds a track with a synth while the audio is running. Returns its
     /// index in `tracks`, or `None` when the studio is full.
     pub fn add_synth_track(&mut self) -> Option<usize> {
@@ -42,12 +39,22 @@ impl AppParams {
     /// Loads a sample and adds a track with a sampler that plays it. Returns
     /// its index in `tracks`, or `None` when the studio is full.
     pub fn add_sample_track(&mut self, path: &Path) -> Result<Option<usize>, Box<dyn Error>> {
-        // loading and resampling happen here, never on the audio thread
-        let sample = Sample::load(path, self.sample_rate)?;
         let base = path
             .file_stem()
             .map_or("Sample".into(), |s| s.to_string_lossy().into_owned());
-        let name = self.unique_track_name(&base);
+        self.add_named_sample_track(path, &base)
+    }
+
+    /// Like `add_sample_track`, with the track named `base` instead of after
+    /// the file.
+    pub fn add_named_sample_track(
+        &mut self,
+        path: &Path,
+        base: &str,
+    ) -> Result<Option<usize>, Box<dyn Error>> {
+        // loading and resampling happen here, never on the audio thread
+        let sample = Sample::load(path, self.sample_rate)?;
+        let name = self.unique_track_name(base);
         let kind = InstrumentKind::Sampler {
             sample: path.display().to_string(),
         };

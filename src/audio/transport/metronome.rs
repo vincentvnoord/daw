@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use crate::{audio::transport::Transport, helpers::AtomicF32};
+use crate::{atomic::AtomicF32, audio::transport::Transport};
 
 pub const BEATS_PER_BAR: u64 = 4;
 pub const DEFAULT_VOLUME: f32 = 0.3;

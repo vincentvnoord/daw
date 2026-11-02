@@ -3,15 +3,16 @@ use std::collections::BTreeSet;
 use eframe::egui::{self, RichText};
 
 use crate::{
-    events::NoteEvent,
-    shared::AppParams,
+    audio::note::NoteEvent,
+    project::Project,
     ui::{
         editor_panel,
         input_panel::InputPanel,
-        track_panel::{self, TrackAction},
         keyboard::{self, key_to_note_event},
         mixer_panel::MixerPanel,
-        theme, transport_panel,
+        theme,
+        track_panel::{self, TrackAction},
+        transport_panel,
         widgets::piano::piano,
     },
 };
@@ -20,7 +21,7 @@ use crate::{
 const LIST_WIDTH: f32 = 200.0;
 
 pub struct App {
-    params: AppParams,
+    project: Project,
     /// Index of the selected track, the one the keyboard plays.
     active: usize,
     held_keys: BTreeSet<u8>,
@@ -31,9 +32,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(params: AppParams) -> Self {
+    pub fn new(project: Project) -> Self {
         Self {
-            params,
+            project,
             active: 0,
             held_keys: BTreeSet::new(),
             mouse_note: None,
@@ -44,7 +45,7 @@ impl App {
 
     /// Sends a note to the selected track's instrument.
     fn send(&mut self, event: NoteEvent) {
-        if let Some(track) = self.params.tracks.get_mut(self.active) {
+        if let Some(track) = self.project.tracks.get_mut(self.active) {
             let _ = track.instrument.notes.push(event);
         }
     }
@@ -54,14 +55,15 @@ impl App {
         let mut dialog = rfd::FileDialog::new()
             .set_title("Add sample")
             .add_filter("WAV audio", &["wav"]);
-        if let Ok(dir) = std::fs::canonicalize("testsamples") {
+        if let Ok(dir) = std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/testsamples"))
+        {
             dialog = dialog.set_directory(dir);
         }
         let Some(path) = dialog.pick_file() else {
             return;
         };
 
-        match self.params.add_sample_track(&path) {
+        match self.project.add_sample_track(&path) {
             Ok(Some(index)) => self.set_active(index),
             Ok(None) => eprintln!("can't add more tracks"),
             Err(err) => eprintln!("failed to load {}: {err}", path.display()),
@@ -123,7 +125,7 @@ impl App {
             ui.painter().circle_filled(dot.center(), 5.0, theme::ACCENT);
             ui.label(RichText::new("Vincent Studio").heading().strong());
             ui.add_space(theme::GAP * 2.0);
-            transport_panel::show(ui, &self.params);
+            transport_panel::show(ui, &self.project);
         });
     }
 
@@ -140,7 +142,7 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.params.collect_garbage();
+        self.project.collect_garbage();
         self.handle_keys(ui);
 
         // not while typing in a field, like the tempo. Consumed, so a focused
@@ -148,7 +150,7 @@ impl eframe::App for App {
         if !ui.ctx().egui_wants_keyboard_input()
             && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Space))
         {
-            self.params.transport.toggle_playing();
+            self.project.transport.toggle_playing();
         }
 
         egui::Panel::top("header")
@@ -165,7 +167,7 @@ impl eframe::App for App {
         egui::Panel::bottom("mixer")
             .frame(theme::panel_frame())
             .resizable(false)
-            .show(ui, |ui| self.mixer_panel.show(ui, &mut self.params));
+            .show(ui, |ui| self.mixer_panel.show(ui, &mut self.project));
 
         // inputs aren't tracks (yet), so they sit to the side, out of the timeline
         let mut new_input = None;
@@ -175,7 +177,7 @@ impl eframe::App for App {
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
                 ui.set_width(LIST_WIDTH);
-                new_input = self.input_panel.show(ui, &self.params);
+                new_input = self.input_panel.show(ui, &self.project);
             });
 
         let mut track_action = None;
@@ -183,13 +185,13 @@ impl eframe::App for App {
             .frame(egui::Frame::new().inner_margin(16))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
-                track_action = track_panel::show(ui, &self.params, self.active);
+                track_action = track_panel::show(ui, &self.project, self.active);
                 ui.add_space(theme::GAP);
-                editor_panel::show(ui, &mut self.params, self.active);
+                editor_panel::show(ui, &mut self.project, self.active);
             });
 
         if let Some(device) = new_input {
-            match self.params.add_input(&device) {
+            match self.project.add_input(&device) {
                 Ok(Some(_)) => {}
                 Ok(None) => eprintln!("can't add more inputs"),
                 Err(err) => eprintln!("failed to open {}: {err}", device.name),
@@ -200,7 +202,7 @@ impl eframe::App for App {
         match track_action {
             Some(TrackAction::Select(index)) => self.set_active(index),
             Some(TrackAction::AddSynth) => {
-                if let Some(index) = self.params.add_synth_track() {
+                if let Some(index) = self.project.add_synth_track() {
                     self.set_active(index);
                 }
             }

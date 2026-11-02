@@ -1,3 +1,5 @@
+use std::error::Error;
+
 use cpal::{
     BufferSize, HostId, SampleFormat, SupportedBufferSize,
     traits::{DeviceTrait, HostTrait, StreamTrait},
@@ -14,20 +16,13 @@ pub struct AudioDevice {
 }
 
 impl AudioDevice {
-    pub fn default() -> AudioDevice {
+    /// The system's default output device, in its default config.
+    pub fn open() -> Result<AudioDevice, Box<dyn Error>> {
         let host = cpal::default_host();
-        println!("{:?}", host.id().name());
-
         let device = host
             .default_output_device()
-            .expect("no output device found");
-        println!("{:?}", device);
-
-        let supported_config = device
-            .default_output_config()
-            .expect("no default output config");
-
-        println!("{:?}", supported_config.sample_format());
+            .ok_or("no output device found")?;
+        let supported_config = device.default_output_config()?;
 
         let sample_format = supported_config.sample_format();
         let buffer_size = match (host.id(), *supported_config.buffer_size()) {
@@ -41,11 +36,11 @@ impl AudioDevice {
         let mut config: cpal::StreamConfig = supported_config.into();
         config.buffer_size = buffer_size;
 
-        AudioDevice {
+        Ok(AudioDevice {
             device,
             config,
             sample_format,
-        }
+        })
     }
 
     pub fn sample_rate(&self) -> f32 {
@@ -62,20 +57,26 @@ impl AudioDevice {
 }
 
 pub struct AudioEngine {
-    stream: cpal::Stream,
+    /// Keeps the audio playing; dropping it stops the stream.
+    _stream: cpal::Stream,
 }
 
 impl AudioEngine {
-    pub fn new<A: StereoSource>(device: AudioDevice, mixer: A) -> AudioEngine {
+    /// Starts playing `source` on `device`.
+    pub fn new<A: StereoSource>(
+        device: AudioDevice,
+        source: A,
+    ) -> Result<AudioEngine, Box<dyn Error>> {
         let stream = match device.sample_format {
-            SampleFormat::F32 => build_stream::<f32, A>(device, mixer),
-            SampleFormat::I16 => build_stream::<i16, A>(device, mixer),
-            SampleFormat::U16 => build_stream::<u16, A>(device, mixer),
-            sample_format => panic!("Unsupported sample format '{sample_format}'"),
-        }
-        .unwrap();
+            SampleFormat::F32 => build_stream::<f32, A>(device, source),
+            SampleFormat::I16 => build_stream::<i16, A>(device, source),
+            SampleFormat::U16 => build_stream::<u16, A>(device, source),
+            sample_format => {
+                return Err(format!("unsupported sample format '{sample_format}'").into());
+            }
+        }?;
 
-        stream.play().unwrap();
-        AudioEngine { stream }
+        stream.play()?;
+        Ok(AudioEngine { _stream: stream })
     }
 }

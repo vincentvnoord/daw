@@ -6,11 +6,11 @@ use crate::{
     audio::{
         capture::{input_channels, open_input},
         studio::{
+            MAX_INPUTS, StudioCommand,
             input::{InputParams, InputSlot},
-            studio::{MAX_INPUTS, StudioCommand},
         },
     },
-    shared::{AppParams, unique_name},
+    project::{Project, unique_name},
 };
 
 /// The UI's side of an input in the studio.
@@ -76,7 +76,7 @@ pub fn input_devices() -> Vec<InputDevice> {
         .collect()
 }
 
-impl AppParams {
+impl Project {
     /// Starts recording from `device` and adds it as an input, playing into a
     /// new channel named after it. It starts disabled, so a mic doesn't feed
     /// back through the speakers the moment it's added. Returns its index in

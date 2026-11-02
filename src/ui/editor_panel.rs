@@ -2,7 +2,7 @@ use eframe::egui::{self, Align, CornerRadius, Layout, Margin, RichText, Stroke};
 
 use crate::{
     audio::mixer::channel::ChannelId,
-    shared::{AppParams, InstrumentHandle, InstrumentKind, Track},
+    project::{InstrumentHandle, InstrumentKind, Project, Track},
     ui::{synth_panel, theme, widgets::card::card},
 };
 
@@ -15,8 +15,8 @@ enum OutputChoice {
 /// The selected track's instrument as one panel: a header with the track's
 /// name, the instrument type and the output channel, and the controls
 /// underneath.
-pub fn show(ui: &mut egui::Ui, params: &mut AppParams, active: usize) {
-    let Some(track) = params.tracks.get(active) else {
+pub fn show(ui: &mut egui::Ui, project: &mut Project, active: usize) {
+    let Some(track) = project.tracks.get(active) else {
         return;
     };
     let mut choice = None;
@@ -31,21 +31,23 @@ pub fn show(ui: &mut egui::Ui, params: &mut AppParams, active: usize) {
             // header, divider and controls explicitly
             ui.vertical(|ui| {
                 ui.set_width(ui.available_width());
-                header(ui, track, params, &mut choice);
+                header(ui, track, project, &mut choice);
                 ui.separator();
                 controls(ui, &track.instrument);
             });
         });
 
     match choice {
-        Some(OutputChoice::Channel(id)) => {
-            params.tracks[active].instrument.params.route.set_channel(id)
-        }
+        Some(OutputChoice::Channel(id)) => project.tracks[active]
+            .instrument
+            .params
+            .route
+            .set_channel(id),
         Some(OutputChoice::NewChannel) => {
             // name the channel after the track that asked for it
-            let name = params.tracks[active].name.clone();
-            if let Some(id) = params.add_channel(name) {
-                params.tracks[active]
+            let name = project.tracks[active].name.clone();
+            if let Some(id) = project.add_channel(name) {
+                project.tracks[active]
                     .instrument
                     .params
                     .route
@@ -56,12 +58,7 @@ pub fn show(ui: &mut egui::Ui, params: &mut AppParams, active: usize) {
     }
 }
 
-fn header(
-    ui: &mut egui::Ui,
-    track: &Track,
-    params: &AppParams,
-    choice: &mut Option<OutputChoice>,
-) {
+fn header(ui: &mut egui::Ui, track: &Track, project: &Project, choice: &mut Option<OutputChoice>) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(&track.name).heading().strong());
         if let Some(kind) = track.kind_label() {
@@ -75,14 +72,14 @@ fn header(
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let current = track.instrument.params.route.get_channel();
             let current_name = current
-                .and_then(|id| params.channel(id))
+                .and_then(|id| project.channel(id))
                 .map_or("No output", |c| c.name.as_str());
 
             egui::ComboBox::from_id_salt("instrument_output")
                 .selected_text(current_name)
                 .width(140.0)
                 .show_ui(ui, |ui| {
-                    for channel in &params.channels {
+                    for channel in &project.channels {
                         let id = channel.id();
                         if ui
                             .selectable_label(current == Some(id), &channel.name)

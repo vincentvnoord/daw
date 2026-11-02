@@ -1,23 +1,22 @@
+use std::error::Error;
+
 use eframe::egui;
 
 use crate::{
-    audio::{
-        engine::{AudioDevice, AudioEngine},
-        studio::default::default_studio,
-    },
+    audio::engine::{AudioDevice, AudioEngine},
+    project::default::default_project,
     ui::app::App,
 };
 
+mod atomic;
 mod audio;
-mod events;
-mod helpers;
-mod shared;
+mod project;
 mod ui;
 
-fn main() -> eframe::Result {
-    let device = AudioDevice::default();
-    let (studio, params) = default_studio(device.sample_rate());
-    let _engine = AudioEngine::new(device, studio);
+fn main() -> Result<(), Box<dyn Error>> {
+    let device = AudioDevice::open()?;
+    let (project, studio) = default_project(device.sample_rate());
+    let _engine = AudioEngine::new(device, studio)?;
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -31,7 +30,9 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| {
             ui::theme::apply(&cc.egui_ctx);
-            Ok(Box::new(App::new(params)))
+            Ok(Box::new(App::new(project)))
         }),
-    )
+    )?;
+
+    Ok(())
 }

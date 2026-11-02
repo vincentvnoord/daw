@@ -6,9 +6,9 @@ use crate::{
             MAX_CHANNELS,
             channel::{Channel, ChannelId, ChannelParams, DEFAULT_GAIN},
         },
-        studio::studio::StudioCommand,
+        studio::StudioCommand,
     },
-    shared::AppParams,
+    project::Project,
 };
 
 /// The UI's side of a mixer channel.
@@ -23,7 +23,7 @@ impl ChannelHandle {
     }
 }
 
-impl AppParams {
+impl Project {
     /// Adds a mixer channel while the audio is running. Returns its id, or
     /// `None` when the mixer is full or the command queue is.
     pub fn add_channel(&mut self, name: String) -> Option<ChannelId> {

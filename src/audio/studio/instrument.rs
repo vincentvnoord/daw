@@ -2,13 +2,11 @@ use std::sync::Arc;
 
 use rtrb::{Producer, RingBuffer};
 
-use crate::{
-    audio::{
-        instrument::{Instrument, InstrumentSource},
-        mixer::channel::{ChannelId, ChannelRoute},
-        source::AudioSource,
-    },
-    events::NoteEvent,
+use crate::audio::{
+    instrument::{Instrument, InstrumentSource},
+    mixer::channel::{ChannelId, ChannelRoute},
+    note::NoteEvent,
+    source::AudioSource,
 };
 
 /// How many note events can wait for the audio thread per instrument.

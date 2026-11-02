@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
-use crate::helpers::AtomicF32;
+use crate::atomic::AtomicF32;
 
 pub mod metronome;
 

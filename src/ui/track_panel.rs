@@ -1,8 +1,8 @@
 use eframe::egui::{self, CornerRadius, Popup, RichText, Sense, Stroke, StrokeKind};
 
 use crate::{
-    audio::studio::studio::MAX_INSTRUMENTS,
-    shared::{AppParams, Track},
+    audio::studio::MAX_INSTRUMENTS,
+    project::{Project, Track},
     ui::{
         theme,
         widgets::list::{add_card, list_card, menu_frame, menu_option, section_label},
@@ -23,19 +23,19 @@ pub enum TrackAction {
 /// type and the channel it plays into, and the lane the timeline will draw
 /// into. Clicking a header selects the track: the keyboard plays it and the
 /// editor shows its instrument. A last card with a + adds a track.
-pub fn show(ui: &mut egui::Ui, params: &AppParams, active: usize) -> Option<TrackAction> {
+pub fn show(ui: &mut egui::Ui, project: &Project, active: usize) -> Option<TrackAction> {
     let mut action = None;
 
     section_label(ui, "TRACKS");
 
-    for (i, track) in params.tracks.iter().enumerate() {
+    for (i, track) in project.tracks.iter().enumerate() {
         let is_active = i == active;
         let click = ui
             .horizontal(|ui| {
                 let click = ui
                     .vertical(|ui| {
                         ui.set_width(HEADER_WIDTH);
-                        header(ui, i, track, params, is_active)
+                        header(ui, i, track, project, is_active)
                     })
                     .inner;
                 lane(ui, click.rect.height());
@@ -48,7 +48,7 @@ pub fn show(ui: &mut egui::Ui, params: &AppParams, active: usize) -> Option<Trac
         }
     }
 
-    if params.tracks.len() < MAX_INSTRUMENTS {
+    if project.tracks.len() < MAX_INSTRUMENTS {
         ui.vertical(|ui| {
             ui.set_width(HEADER_WIDTH);
             let add = add_card(ui, "add_track").on_hover_text("Add track");
@@ -78,7 +78,7 @@ fn header(
     ui: &mut egui::Ui,
     index: usize,
     track: &Track,
-    params: &AppParams,
+    project: &Project,
     selected: bool,
 ) -> egui::Response {
     let output = track
@@ -86,7 +86,7 @@ fn header(
         .params
         .route
         .get_channel()
-        .and_then(|id| params.channel(id))
+        .and_then(|id| project.channel(id))
         .map_or("no output", |c| c.name.as_str());
 
     list_card(ui, ("track", index), selected, |ui| {
@@ -105,7 +105,8 @@ fn header(
 
 /// The empty strip right of a header, where the track's placements will go.
 fn lane(ui: &mut egui::Ui, height: f32) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
     ui.painter().rect(
         rect,
         CornerRadius::same(theme::RADIUS),

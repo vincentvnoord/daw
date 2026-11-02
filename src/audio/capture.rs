@@ -30,11 +30,10 @@ pub fn open_input(
         .filter_map(|range| range.try_with_sample_rate(sample_rate))
         .collect();
 
-    let supported = FORMATS
+    let supported = *FORMATS
         .iter()
         .find_map(|&format| configs.iter().find(|c| c.sample_format() == format))
-        .ok_or("input device has no config we can record at the output's sample rate")?
-        .clone();
+        .ok_or("input device has no config we can record at the output's sample rate")?;
 
     let sample_format = supported.sample_format();
     let config: cpal::StreamConfig = supported.into();
