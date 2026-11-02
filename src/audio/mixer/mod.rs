@@ -77,7 +77,7 @@ impl Mixer {
 }
 
 impl StereoSource for Mixer {
-    fn begin_buffer(&mut self) {
+    fn begin_buffer(&mut self, _frames: usize) {
         self.params.meter.record(self.peak);
         self.peak = 0.0;
 
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn inputs_are_summed_into_the_mix() {
         let (mut mixer, _) = mixer_with(2);
-        mixer.begin_buffer();
+        mixer.begin_buffer(1);
 
         mixer.add_input(0, 0.25);
         mixer.add_input(0, 0.25);
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn inputs_are_cleared_after_each_frame() {
         let (mut mixer, _) = mixer_with(1);
-        mixer.begin_buffer();
+        mixer.begin_buffer(1);
 
         mixer.add_input(0, 1.0);
         mixer.next_frame();

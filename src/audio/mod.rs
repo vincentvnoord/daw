@@ -3,6 +3,7 @@ pub mod dsp;
 pub mod engine;
 pub mod frame;
 pub mod instrument;
+pub mod latency;
 pub mod mixer;
 pub mod note;
 pub mod output;

@@ -1,24 +1,22 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, time::Instant};
 
 use eframe::egui::{self, RichText};
 
 use crate::{
-    audio::note::NoteEvent,
-    project::Project,
+    audio::{latency, note::NoteEvent},
+    project::{InputDevice, Project, Track},
     ui::{
         editor_panel,
-        input_panel::InputPanel,
         keyboard::{self, key_to_note_event},
         mixer_panel::MixerPanel,
+        piano_roll::PianoRoll,
         theme,
+        timeline::Timeline,
         track_panel::{self, TrackAction},
         transport_panel,
         widgets::piano::piano,
     },
 };
-
-/// Width of the column with the input list.
-const LIST_WIDTH: f32 = 200.0;
 
 pub struct App {
     project: Project,
@@ -28,7 +26,14 @@ pub struct App {
     /// Note currently played by clicking the on-screen piano.
     mouse_note: Option<u8>,
     mixer_panel: MixerPanel,
-    input_panel: InputPanel,
+    /// Recording devices offered for an audio track's input, looked up when
+    /// the list opens, since asking the system every frame would be slow.
+    input_devices: Vec<InputDevice>,
+    timeline: Timeline,
+    /// The sequence open for editing, shown instead of the instrument editor.
+    piano_roll: Option<PianoRoll>,
+    /// When the latency stats were last printed.
+    latency_logged: Instant,
 }
 
 impl App {
@@ -39,14 +44,22 @@ impl App {
             held_keys: BTreeSet::new(),
             mouse_note: None,
             mixer_panel: MixerPanel::default(),
-            input_panel: InputPanel::default(),
+            input_devices: Vec::new(),
+            timeline: Timeline::default(),
+            piano_roll: None,
+            latency_logged: Instant::now(),
         }
     }
 
     /// Sends a note to the selected track's instrument.
     fn send(&mut self, event: NoteEvent) {
-        if let Some(track) = self.project.tracks.get_mut(self.active) {
-            let _ = track.instrument.notes.push(event);
+        if let Some(instrument) = self
+            .project
+            .tracks
+            .get_mut(self.active)
+            .and_then(Track::instrument_mut)
+        {
+            let _ = instrument.notes.push(event);
         }
     }
 
@@ -143,6 +156,10 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.project.collect_garbage();
+        if latency::logging() && self.latency_logged.elapsed().as_secs() >= 1 {
+            self.latency_logged = Instant::now();
+            self.project.log_latency();
+        }
         self.handle_keys(ui);
 
         // not while typing in a field, like the tempo. Consumed, so a focused
@@ -169,34 +186,28 @@ impl eframe::App for App {
             .resizable(false)
             .show(ui, |ui| self.mixer_panel.show(ui, &mut self.project));
 
-        // inputs aren't tracks (yet), so they sit to the side, out of the timeline
-        let mut new_input = None;
-        egui::Panel::right("inputs")
-            .frame(theme::panel_frame())
-            .resizable(false)
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
-                ui.set_width(LIST_WIDTH);
-                new_input = self.input_panel.show(ui, &self.project);
-            });
-
         let mut track_action = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(16))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
-                track_action = track_panel::show(ui, &self.project, self.active);
+                track_action =
+                    track_panel::show(ui, &self.project, self.active, &mut self.timeline);
                 ui.add_space(theme::GAP);
-                editor_panel::show(ui, &mut self.project, self.active);
+                match &mut self.piano_roll {
+                    Some(roll) => {
+                        if !roll.show(ui, &mut self.project) {
+                            self.piano_roll = None;
+                        }
+                    }
+                    None => editor_panel::show(
+                        ui,
+                        &mut self.project,
+                        self.active,
+                        &mut self.input_devices,
+                    ),
+                }
             });
-
-        if let Some(device) = new_input {
-            match self.project.add_input(&device) {
-                Ok(Some(_)) => {}
-                Ok(None) => eprintln!("can't add more inputs"),
-                Err(err) => eprintln!("failed to open {}: {err}", device.name),
-            }
-        }
 
         // handled after drawing, so the file dialog doesn't open mid-frame
         match track_action {
@@ -207,6 +218,21 @@ impl eframe::App for App {
                 }
             }
             Some(TrackAction::AddSample) => self.add_sample(),
+            Some(TrackAction::AddAudio) => {
+                if let Some(index) = self.project.add_audio_track() {
+                    self.set_active(index);
+                }
+            }
+            Some(TrackAction::MovePlacement {
+                from,
+                index,
+                to,
+                start,
+            }) => self.project.move_placement(from, index, to, start),
+            Some(TrackAction::OpenSequence { track, sequence }) => {
+                self.set_active(track);
+                self.piano_roll = Some(PianoRoll::new(sequence, track));
+            }
             None => {}
         }
 

@@ -3,26 +3,82 @@ use std::{error::Error, path::Path};
 use crate::{
     audio::{
         instrument::Instrument,
+        mixer::channel::ChannelRoute,
         sampler::{Sampler, VOICES as SAMPLER_VOICES, sample::Sample},
         studio::{MAX_INSTRUMENTS, StudioCommand, instrument::InstrumentSlot},
         synth::Synth,
     },
-    project::{InstrumentHandle, InstrumentKind, Project, unique_name},
+    project::{AudioHandle, InstrumentHandle, InstrumentKind, Placement, Project, unique_name},
 };
 
-/// A row on the timeline: one instrument of its own, playing into a mixer
-/// channel through the instrument's route. Several tracks can share a channel.
+/// A row on the timeline, playing into a mixer channel. Several tracks can
+/// share a channel.
 pub struct Track {
     pub name: String,
-    pub instrument: InstrumentHandle,
+    pub source: TrackSource,
+    /// Where sequences play on this track, in no particular order. Always
+    /// empty on an audio track.
+    pub placements: Vec<Placement>,
+}
+
+/// What makes a track's sound.
+pub enum TrackSource {
+    /// An instrument of its own, playing the sequences placed on the track.
+    Instrument(InstrumentHandle),
+    /// A live input it monitors (and, later, the audio recorded from it).
+    Audio(AudioHandle),
 }
 
 impl Track {
     /// The type to show next to the name, unless the name already says it
     /// (a track called "Synth" doesn't need "SYNTH" next to it).
     pub fn kind_label(&self) -> Option<&'static str> {
-        let label = self.instrument.kind.label();
+        let label = match &self.source {
+            TrackSource::Instrument(instrument) => instrument.kind.label(),
+            TrackSource::Audio(_) => "Audio",
+        };
         (!self.name.eq_ignore_ascii_case(label)).then_some(label)
+    }
+
+    pub fn instrument(&self) -> Option<&InstrumentHandle> {
+        match &self.source {
+            TrackSource::Instrument(instrument) => Some(instrument),
+            TrackSource::Audio(_) => None,
+        }
+    }
+
+    pub fn instrument_mut(&mut self) -> Option<&mut InstrumentHandle> {
+        match &mut self.source {
+            TrackSource::Instrument(instrument) => Some(instrument),
+            TrackSource::Audio(_) => None,
+        }
+    }
+
+    pub fn audio(&self) -> Option<&AudioHandle> {
+        match &self.source {
+            TrackSource::Audio(audio) => Some(audio),
+            TrackSource::Instrument(_) => None,
+        }
+    }
+
+    pub fn audio_mut(&mut self) -> Option<&mut AudioHandle> {
+        match &mut self.source {
+            TrackSource::Audio(audio) => Some(audio),
+            TrackSource::Instrument(_) => None,
+        }
+    }
+
+    /// Which channel the track plays into.
+    pub fn route(&self) -> &ChannelRoute {
+        match &self.source {
+            TrackSource::Instrument(instrument) => &instrument.params.route,
+            TrackSource::Audio(audio) => &audio.params.route,
+        }
+    }
+
+    /// Whether sequences can be placed on it.
+    pub fn takes_sequences(&self) -> bool {
+        self.instrument().is_some()
     }
 }
 
@@ -72,15 +128,16 @@ impl Project {
     ) -> Option<usize> {
         // room for both the channel and the instrument, so we never end up
         // with one without the other
-        if self.tracks.len() >= MAX_INSTRUMENTS || self.commands.slots() < 2 {
+        let slot = self.tracks.iter().filter(|t| t.takes_sequences()).count();
+        if slot >= MAX_INSTRUMENTS || self.commands.slots() < 2 {
             return None;
         }
 
         let channel = self.add_channel(name.clone());
-        let (slot, notes, params) = InstrumentSlot::create(instrument, channel);
+        let (instrument, notes, params) = InstrumentSlot::create(instrument, channel);
         if self
             .commands
-            .push(StudioCommand::AddInstrument(slot))
+            .push(StudioCommand::AddInstrument(instrument))
             .is_err()
         {
             return None;
@@ -88,16 +145,18 @@ impl Project {
 
         self.tracks.push(Track {
             name,
-            instrument: InstrumentHandle {
+            source: TrackSource::Instrument(InstrumentHandle {
+                slot,
                 kind,
                 notes,
                 params,
-            },
+            }),
+            placements: Vec::new(),
         });
         Some(self.tracks.len() - 1)
     }
 
-    fn unique_track_name(&self, base: &str) -> String {
+    pub(super) fn unique_track_name(&self, base: &str) -> String {
         unique_name(base, |name| self.tracks.iter().any(|t| t.name == name))
     }
 }

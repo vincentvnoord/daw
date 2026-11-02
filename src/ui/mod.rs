@@ -1,10 +1,11 @@
 pub mod app;
 mod editor_panel;
-mod input_panel;
 mod keyboard;
 mod mixer_panel;
+mod piano_roll;
 mod synth_panel;
 pub mod theme;
+mod timeline;
 mod track_panel;
 mod transport_panel;
 mod widgets;

@@ -1,9 +1,17 @@
+use std::sync::atomic::Ordering;
+
 use eframe::egui::{self, Align, CornerRadius, Layout, Margin, RichText, Stroke};
 
 use crate::{
-    audio::mixer::channel::ChannelId,
-    project::{InstrumentHandle, InstrumentKind, Project, Track},
-    ui::{synth_panel, theme, widgets::card::card},
+    audio::{mixer::channel::ChannelId, studio::input::MAX_TRIM},
+    project::{
+        AudioHandle, InputDevice, InstrumentHandle, InstrumentKind, Project, Track, TrackSource,
+        input_devices,
+    },
+    ui::{
+        synth_panel, theme,
+        widgets::{card::card, knob::Knob, value::Unit},
+    },
 };
 
 /// What the user picked in the output dropdown.
@@ -12,14 +20,21 @@ enum OutputChoice {
     NewChannel,
 }
 
-/// The selected track's instrument as one panel: a header with the track's
-/// name, the instrument type and the output channel, and the controls
-/// underneath.
-pub fn show(ui: &mut egui::Ui, project: &mut Project, active: usize) {
+/// The selected track as one panel: a header with the track's name, its type
+/// and the output channel, and its controls underneath: the instrument's for
+/// an instrument track, the input's for an audio track. `devices` is the
+/// list of recording devices offered for an audio track's input.
+pub fn show(
+    ui: &mut egui::Ui,
+    project: &mut Project,
+    active: usize,
+    devices: &mut Vec<InputDevice>,
+) {
     let Some(track) = project.tracks.get(active) else {
         return;
     };
     let mut choice = None;
+    let mut input = None;
 
     egui::Frame::new()
         .fill(theme::PANEL)
@@ -33,28 +48,33 @@ pub fn show(ui: &mut egui::Ui, project: &mut Project, active: usize) {
                 ui.set_width(ui.available_width());
                 header(ui, track, project, &mut choice);
                 ui.separator();
-                controls(ui, &track.instrument);
+                let layout = Layout::left_to_right(Align::Min).with_main_wrap(true);
+                ui.with_layout(layout, |ui| match &track.source {
+                    TrackSource::Instrument(instrument) => instrument_controls(ui, instrument),
+                    TrackSource::Audio(audio) => input = audio_controls(ui, audio, devices),
+                });
             });
         });
 
     match choice {
-        Some(OutputChoice::Channel(id)) => project.tracks[active]
-            .instrument
-            .params
-            .route
-            .set_channel(id),
+        Some(OutputChoice::Channel(id)) => project.tracks[active].route().set_channel(id),
         Some(OutputChoice::NewChannel) => {
             // name the channel after the track that asked for it
             let name = project.tracks[active].name.clone();
             if let Some(id) = project.add_channel(name) {
-                project.tracks[active]
-                    .instrument
-                    .params
-                    .route
-                    .set_channel(Some(id));
+                project.tracks[active].route().set_channel(Some(id));
             }
         }
         None => {}
+    }
+
+    // opened after drawing, since opening a device can take a moment
+    if let Some(picked) = input {
+        let device = picked.map(|i| &devices[i]);
+        if let Err(err) = project.set_track_input(active, device) {
+            let name = device.map_or("no input", |d| d.name.as_str());
+            eprintln!("failed to open {name}: {err}");
+        }
     }
 }
 
@@ -70,12 +90,12 @@ fn header(ui: &mut egui::Ui, track: &Track, project: &Project, choice: &mut Opti
         }
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let current = track.instrument.params.route.get_channel();
+            let current = track.route().get_channel();
             let current_name = current
                 .and_then(|id| project.channel(id))
                 .map_or("No output", |c| c.name.as_str());
 
-            egui::ComboBox::from_id_salt("instrument_output")
+            egui::ComboBox::from_id_salt("track_output")
                 .selected_text(current_name)
                 .width(140.0)
                 .show_ui(ui, |ui| {
@@ -109,14 +129,71 @@ fn header(ui: &mut egui::Ui, track: &Track, project: &Project, choice: &mut Opti
     });
 }
 
-fn controls(ui: &mut egui::Ui, instrument: &InstrumentHandle) {
-    let layout = Layout::left_to_right(Align::Min).with_main_wrap(true);
-    ui.with_layout(layout, |ui| match &instrument.kind {
+fn instrument_controls(ui: &mut egui::Ui, instrument: &InstrumentHandle) {
+    match &instrument.kind {
         InstrumentKind::Synth(params) => synth_panel::show(ui, params),
         InstrumentKind::Sampler { sample } => {
             card(ui, "Sample", |ui| {
                 ui.label(RichText::new(sample).font(theme::value_font()));
             });
         }
+    }
+}
+
+/// Which input the track listens to, whether it's heard, and its trim.
+/// Returns the input picked in the dropdown, if one was: an index in
+/// `devices`, or `None` for no input.
+fn audio_controls(
+    ui: &mut egui::Ui,
+    audio: &AudioHandle,
+    devices: &mut Vec<InputDevice>,
+) -> Option<Option<usize>> {
+    let mut picked = None;
+
+    card(ui, "Input", |ui| {
+        let current = audio.input.as_ref().map(|i| i.name.as_str());
+        let combo = egui::ComboBox::from_id_salt("track_input")
+            .selected_text(current.unwrap_or("No input"))
+            .width(220.0)
+            .show_ui(ui, |ui| {
+                if ui.selectable_label(current.is_none(), "No input").clicked() {
+                    picked = Some(None);
+                }
+                if devices.is_empty() {
+                    ui.label(RichText::new("No input devices").color(theme::TEXT_DIM));
+                }
+                for (i, device) in devices.iter().enumerate() {
+                    let name = device.input_name();
+                    if ui
+                        .selectable_label(current == Some(name.as_str()), &name)
+                        .clicked()
+                    {
+                        picked = Some(Some(i));
+                    }
+                }
+            });
+        // looked up as the list opens: asking the system every frame is slow
+        if combo.response.clicked() {
+            *devices = input_devices();
+        }
+
+        ui.add_space(theme::GAP);
+        let params = &audio.params;
+        let mut monitoring = params.enabled.load(Ordering::Relaxed);
+        if ui
+            .toggle_value(&mut monitoring, "Monitor")
+            .on_hover_text("Hear the input through the track's channel")
+            .changed()
+        {
+            params.enabled.store(monitoring, Ordering::Relaxed);
+        }
     });
+
+    card(ui, "Level", |ui| {
+        ui.add(
+            Knob::new(&audio.params.trim, 1.0..=MAX_TRIM, "Trim", Unit::Decibels).logarithmic(true),
+        );
+    });
+
+    picked
 }

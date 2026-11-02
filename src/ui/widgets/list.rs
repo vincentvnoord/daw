@@ -1,4 +1,4 @@
-//! The pieces of the track and input lists: clickable cards, the add menu
+//! The pieces of the track list: clickable cards, the add menu
 //! under the + card, and the section title above each list.
 
 use eframe::egui::{self, CornerRadius, CursorIcon, Margin, RichText, Sense, Stroke, StrokeKind};

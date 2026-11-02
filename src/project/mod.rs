@@ -1,33 +1,36 @@
 //! The UI's side of the studio: the project the user works on, holding
 //! handles to everything running on the audio thread, and the methods that
-//! change it while audio runs. Each kind of thing (channels, tracks,
-//! instruments, inputs) has its own file with its handle and its part of
+//! change it while audio runs. Each kind of thing (channels, tracks, audio
+//! tracks, instruments) has its own file with its handle and its part of
 //! `impl Project`.
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::Ordering};
 
 use rtrb::{Consumer, Producer, RingBuffer};
 
 use crate::{
     atomic::AtomicF32,
     audio::{
+        latency,
         mixer::{MixerParams, meter::Meter},
         schedule::{Schedule, ScheduledNote},
-        studio::{Garbage, Studio, StudioCommand},
+        studio::{Garbage, Studio, StudioCommand, StudioStats},
         transport::{TransportParams, metronome::MetronomeParams},
     },
 };
 
+mod audio_tracks;
 mod channels;
 pub mod default;
-mod inputs;
 mod instruments;
+mod timeline;
 mod tracks;
 
+pub use audio_tracks::{AudioHandle, InputDevice, input_devices};
 pub use channels::ChannelHandle;
-pub use inputs::{InputDevice, InputHandle, input_devices};
 pub use instruments::{InstrumentHandle, InstrumentKind};
-pub use tracks::Track;
+pub use timeline::{Note, Placement, Sequence};
+pub use tracks::{Track, TrackSource};
 
 /// How many changes from the UI can wait for the audio thread. The garbage
 /// queue is the same size, so everything a batch of commands removes fits.
@@ -42,11 +45,13 @@ pub struct Project {
     pub mixer: Arc<MixerParams>,
     pub transport: Arc<TransportParams>,
     pub metronome: Arc<MetronomeParams>,
+    pub stats: Arc<StudioStats>,
     /// The mixer channels, in mixer order.
     pub channels: Vec<ChannelHandle>,
     /// The tracks, top to bottom. Each owns one instrument.
     pub tracks: Vec<Track>,
-    pub inputs: Vec<InputHandle>,
+    /// Every sequence in the project, placed or not.
+    pub sequences: Vec<Sequence>,
     /// Sends changes to the studio on the audio thread.
     pub commands: Producer<StudioCommand>,
     /// What the studio sends back to be dropped on this thread.
@@ -66,6 +71,7 @@ impl Project {
         let metronome = Arc::new(MetronomeParams::new());
         let (commands, command_queue) = RingBuffer::new(COMMAND_QUEUE_SIZE);
         let (garbage_bin, garbage) = RingBuffer::new(COMMAND_QUEUE_SIZE);
+        let stats = Arc::new(StudioStats::default());
 
         let studio = Studio::new(
             Arc::clone(&mixer),
@@ -73,6 +79,7 @@ impl Project {
             Arc::clone(&metronome),
             command_queue,
             garbage_bin,
+            Arc::clone(&stats),
             sample_rate,
         );
 
@@ -81,9 +88,10 @@ impl Project {
             mixer,
             transport,
             metronome,
+            stats,
             channels: Vec::new(),
             tracks: Vec::new(),
-            inputs: Vec::new(),
+            sequences: Vec::new(),
             commands,
             garbage,
         };
@@ -98,6 +106,35 @@ impl Project {
         self.commands
             .push(StudioCommand::SetSchedule(Schedule::new(notes)))
             .is_ok()
+    }
+
+    /// Prints the output buffer size, and for each audio track listening to
+    /// an input how much is waiting and how often it ran dry. See
+    /// `audio::latency`.
+    pub fn log_latency(&self) {
+        let rate = self.sample_rate as u32;
+        let frames = self.stats.buffer_frames.load(Ordering::Relaxed);
+        let mut line = format!(
+            "[latency] output buffer {frames} frames ({:.1} ms)",
+            latency::millis(frames, rate)
+        );
+
+        for track in &self.tracks {
+            if let Some(audio) = track.audio()
+                && let Some(input) = &audio.input
+            {
+                let backlog = audio.params.backlog.load(Ordering::Relaxed);
+                let underruns = audio.params.underruns.load(Ordering::Relaxed);
+                line += &format!(
+                    "; {} ({}): backlog {backlog} ({:.1} ms), {underruns} underruns",
+                    track.name,
+                    input.name,
+                    latency::millis(backlog, rate),
+                );
+            }
+        }
+
+        eprintln!("{line}");
     }
 
     /// Drops what the studio is done with. Call once per frame.
