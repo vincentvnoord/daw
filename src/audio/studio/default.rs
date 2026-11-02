@@ -11,7 +11,7 @@ use crate::{
         transport::{TransportParams, metronome::MetronomeParams},
     },
     helpers::AtomicF32,
-    shared::{AppParams, ChannelHandle, InstrumentHandle, InstrumentKind},
+    shared::{AppParams, ChannelHandle, InstrumentHandle, InstrumentKind, Track},
 };
 
 /// How many changes from the UI can wait for the audio thread. The garbage
@@ -20,8 +20,8 @@ const COMMAND_QUEUE_SIZE: usize = 64;
 
 const KICK_PATH: &str = "testsamples/kick_16bit_stereo_44k.wav";
 
-/// The setup the app starts with: a kick on a "Drums" channel and a synth on
-/// a "Keys" channel.
+/// The setup the app starts with: a kick track on a "Drums" channel and a
+/// synth track on a "Keys" channel.
 ///
 /// Returns the studio for the audio engine and the params for the UI.
 pub fn default_studio(sample_rate: f32) -> (Studio, AppParams) {
@@ -68,20 +68,24 @@ pub fn default_studio(sample_rate: f32) -> (Studio, AppParams) {
                 params: keys,
             },
         ],
-        instruments: vec![
-            InstrumentHandle {
+        tracks: vec![
+            Track {
                 name: "Synth".to_owned(),
-                kind: InstrumentKind::Synth(synth_params),
-                notes: synth_notes,
-                params: synth_instrument_params,
-            },
-            InstrumentHandle {
-                name: "Kick".to_owned(),
-                kind: InstrumentKind::Sampler {
-                    sample: KICK_PATH.to_owned(),
+                instrument: InstrumentHandle {
+                    kind: InstrumentKind::Synth(synth_params),
+                    notes: synth_notes,
+                    params: synth_instrument_params,
                 },
-                notes: kick_notes,
-                params: kick_params,
+            },
+            Track {
+                name: "Kick".to_owned(),
+                instrument: InstrumentHandle {
+                    kind: InstrumentKind::Sampler {
+                        sample: KICK_PATH.to_owned(),
+                    },
+                    notes: kick_notes,
+                    params: kick_params,
+                },
             },
         ],
         inputs: Vec::new(),

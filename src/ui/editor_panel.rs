@@ -2,7 +2,7 @@ use eframe::egui::{self, Align, CornerRadius, Layout, Margin, RichText, Stroke};
 
 use crate::{
     audio::mixer::channel::ChannelId,
-    shared::{AppParams, InstrumentHandle, InstrumentKind},
+    shared::{AppParams, InstrumentHandle, InstrumentKind, Track},
     ui::{synth_panel, theme, widgets::card::card},
 };
 
@@ -12,10 +12,11 @@ enum OutputChoice {
     NewChannel,
 }
 
-/// The selected instrument as one panel: a header with its name, type and
-/// output channel, and its controls underneath.
+/// The selected track's instrument as one panel: a header with the track's
+/// name, the instrument type and the output channel, and the controls
+/// underneath.
 pub fn show(ui: &mut egui::Ui, params: &mut AppParams, active: usize) {
-    let Some(instrument) = params.instruments.get(active) else {
+    let Some(track) = params.tracks.get(active) else {
         return;
     };
     let mut choice = None;
@@ -30,19 +31,22 @@ pub fn show(ui: &mut egui::Ui, params: &mut AppParams, active: usize) {
             // header, divider and controls explicitly
             ui.vertical(|ui| {
                 ui.set_width(ui.available_width());
-                header(ui, instrument, params, &mut choice);
+                header(ui, track, params, &mut choice);
                 ui.separator();
-                controls(ui, instrument);
+                controls(ui, &track.instrument);
             });
         });
 
     match choice {
-        Some(OutputChoice::Channel(id)) => params.instruments[active].params.route.set_channel(id),
+        Some(OutputChoice::Channel(id)) => {
+            params.tracks[active].instrument.params.route.set_channel(id)
+        }
         Some(OutputChoice::NewChannel) => {
-            // name the channel after the instrument that asked for it
-            let name = params.instruments[active].name.clone();
+            // name the channel after the track that asked for it
+            let name = params.tracks[active].name.clone();
             if let Some(id) = params.add_channel(name) {
-                params.instruments[active]
+                params.tracks[active]
+                    .instrument
                     .params
                     .route
                     .set_channel(Some(id));
@@ -54,13 +58,13 @@ pub fn show(ui: &mut egui::Ui, params: &mut AppParams, active: usize) {
 
 fn header(
     ui: &mut egui::Ui,
-    instrument: &InstrumentHandle,
+    track: &Track,
     params: &AppParams,
     choice: &mut Option<OutputChoice>,
 ) {
     ui.horizontal(|ui| {
-        ui.label(RichText::new(&instrument.name).heading().strong());
-        if let Some(kind) = instrument.kind_label() {
+        ui.label(RichText::new(&track.name).heading().strong());
+        if let Some(kind) = track.kind_label() {
             ui.label(
                 RichText::new(kind.to_uppercase())
                     .font(theme::label_font())
@@ -69,7 +73,7 @@ fn header(
         }
 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            let current = instrument.params.route.get_channel();
+            let current = track.instrument.params.route.get_channel();
             let current_name = current
                 .and_then(|id| params.channel(id))
                 .map_or("No output", |c| c.name.as_str());

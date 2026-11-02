@@ -69,9 +69,9 @@ impl AppParams {
 
         self.channels.retain(|c| c.id() != id);
         let routes = self
-            .instruments
+            .tracks
             .iter()
-            .map(|i| &i.params.route)
+            .map(|t| &t.instrument.params.route)
             .chain(self.inputs.iter().map(|i| &i.params.route));
         for route in routes {
             if route.get_channel() == Some(id) {

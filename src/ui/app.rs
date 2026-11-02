@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use eframe::egui::{self, Align, Layout, RichText};
+use eframe::egui::{self, RichText};
 
 use crate::{
     events::NoteEvent,
@@ -8,7 +8,7 @@ use crate::{
     ui::{
         editor_panel,
         input_panel::InputPanel,
-        instrument_panel::{self, InstrumentAction},
+        track_panel::{self, TrackAction},
         keyboard::{self, key_to_note_event},
         mixer_panel::MixerPanel,
         theme, transport_panel,
@@ -16,12 +16,12 @@ use crate::{
     },
 };
 
-/// Width of the column with the instrument and input lists.
+/// Width of the column with the input list.
 const LIST_WIDTH: f32 = 200.0;
 
 pub struct App {
     params: AppParams,
-    /// Index of the instrument the keyboard plays.
+    /// Index of the selected track, the one the keyboard plays.
     active: usize,
     held_keys: BTreeSet<u8>,
     /// Note currently played by clicking the on-screen piano.
@@ -42,14 +42,14 @@ impl App {
         }
     }
 
-    /// Sends a note to the active instrument.
+    /// Sends a note to the selected track's instrument.
     fn send(&mut self, event: NoteEvent) {
-        if let Some(instrument) = self.params.instruments.get_mut(self.active) {
-            let _ = instrument.notes.push(event);
+        if let Some(track) = self.params.tracks.get_mut(self.active) {
+            let _ = track.instrument.notes.push(event);
         }
     }
 
-    /// Asks for a WAV file and adds a sampler that plays it.
+    /// Asks for a WAV file and adds a track with a sampler that plays it.
     fn add_sample(&mut self) {
         let mut dialog = rfd::FileDialog::new()
             .set_title("Add sample")
@@ -61,14 +61,14 @@ impl App {
             return;
         };
 
-        match self.params.add_sample(&path) {
+        match self.params.add_sample_track(&path) {
             Ok(Some(index)) => self.set_active(index),
-            Ok(None) => eprintln!("can't add more instruments"),
+            Ok(None) => eprintln!("can't add more tracks"),
             Err(err) => eprintln!("failed to load {}: {err}", path.display()),
         }
     }
 
-    /// Switches the keyboard to another instrument. Releases every held note
+    /// Switches the keyboard to another track. Releases every held note
     /// on the old one first, otherwise those notes would never get a note off.
     fn set_active(&mut self, index: usize) {
         let held: Vec<u8> = self
@@ -167,21 +167,25 @@ impl eframe::App for App {
             .resizable(false)
             .show(ui, |ui| self.mixer_panel.show(ui, &mut self.params));
 
-        let mut instrument_action = None;
+        // inputs aren't tracks (yet), so they sit to the side, out of the timeline
         let mut new_input = None;
+        egui::Panel::right("inputs")
+            .frame(theme::panel_frame())
+            .resizable(false)
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
+                ui.set_width(LIST_WIDTH);
+                new_input = self.input_panel.show(ui, &self.params);
+            });
+
+        let mut track_action = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(16))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
-                ui.with_layout(Layout::left_to_right(Align::Min), |ui| {
-                    ui.vertical(|ui| {
-                        ui.set_width(LIST_WIDTH);
-                        instrument_action = instrument_panel::show(ui, &self.params, self.active);
-                        ui.add_space(theme::GAP);
-                        new_input = self.input_panel.show(ui, &self.params);
-                    });
-                    editor_panel::show(ui, &mut self.params, self.active);
-                });
+                track_action = track_panel::show(ui, &self.params, self.active);
+                ui.add_space(theme::GAP);
+                editor_panel::show(ui, &mut self.params, self.active);
             });
 
         if let Some(device) = new_input {
@@ -193,14 +197,14 @@ impl eframe::App for App {
         }
 
         // handled after drawing, so the file dialog doesn't open mid-frame
-        match instrument_action {
-            Some(InstrumentAction::Select(index)) => self.set_active(index),
-            Some(InstrumentAction::AddSynth) => {
-                if let Some(index) = self.params.add_synth() {
+        match track_action {
+            Some(TrackAction::Select(index)) => self.set_active(index),
+            Some(TrackAction::AddSynth) => {
+                if let Some(index) = self.params.add_synth_track() {
                     self.set_active(index);
                 }
             }
-            Some(InstrumentAction::AddSample) => self.add_sample(),
+            Some(TrackAction::AddSample) => self.add_sample(),
             None => {}
         }
 
