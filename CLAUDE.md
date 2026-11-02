@@ -4,7 +4,7 @@ A DAW in Rust: cpal for audio, egui (eframe) for the UI. Run everything inside `
 
 ## Collaboration
 
-The user writes the code and is learning by building. Guide and review: explain the design, point at the files, sketch the shape. Implement only when asked. Leave building, testing and formatting to the user after small changes.
+This is a learning project. Claude implements features on a feature branch and the user reviews, so explain the design and the non-obvious choices alongside the code. When the user wants to write a piece themselves, guide and review instead. Leave building, testing and formatting to the user after small changes.
 
 ## Architecture
 

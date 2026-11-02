@@ -3,10 +3,9 @@ use std::sync::Arc;
 use rtrb::{Producer, RingBuffer};
 
 use crate::audio::{
-    instrument::{Instrument, InstrumentSource},
+    instrument::{Instrument, InstrumentSource, NoteSource},
     mixer::channel::{ChannelId, ChannelRoute},
     note::NoteEvent,
-    source::AudioSource,
 };
 
 /// How many note events can wait for the audio thread per instrument.
@@ -25,7 +24,7 @@ impl InstrumentParams {
 }
 
 pub struct InstrumentSlot {
-    pub source: Box<dyn AudioSource>,
+    pub source: Box<dyn NoteSource>,
     /// Index in the mixer of the channel this instrument plays into, looked
     /// up from the params once per buffer.
     pub output: Option<usize>,
@@ -47,7 +46,7 @@ impl InstrumentSlot {
         (slot, notes, params)
     }
 
-    pub fn new(params: Arc<InstrumentParams>, source: Box<dyn AudioSource>) -> Self {
+    pub fn new(params: Arc<InstrumentParams>, source: Box<dyn NoteSource>) -> Self {
         Self {
             source,
             output: None,

@@ -12,6 +12,7 @@ use crate::{
     atomic::AtomicF32,
     audio::{
         mixer::{MixerParams, meter::Meter},
+        schedule::{Schedule, ScheduledNote},
         studio::{Garbage, Studio, StudioCommand},
         transport::{TransportParams, metronome::MetronomeParams},
     },
@@ -88,6 +89,15 @@ impl Project {
         };
 
         (project, studio)
+    }
+
+    /// Replaces the notes the studio plays along the transport. Sorting and
+    /// allocating happen here, so the studio only swaps it in. Returns
+    /// `false` when the command queue is full.
+    pub fn set_schedule(&mut self, notes: Vec<ScheduledNote>) -> bool {
+        self.commands
+            .push(StudioCommand::SetSchedule(Schedule::new(notes)))
+            .is_ok()
     }
 
     /// Drops what the studio is done with. Call once per frame.

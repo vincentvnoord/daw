@@ -44,6 +44,10 @@ pub struct Transport {
     position: u64, // position in samples
     bpm: f64,
     sample_rate: f64,
+    /// Whether the playhead was moved this buffer, rather than played to.
+    jumped: bool,
+    /// Whether playing stopped this buffer.
+    stopped: bool,
 }
 
 impl Transport {
@@ -55,16 +59,21 @@ impl Transport {
             position: 0,
             bpm,
             sample_rate,
+            jumped: false,
+            stopped: false,
         }
     }
 
     /// Picks up what the UI changed and tells it where the playhead is.
     pub fn begin_buffer(&mut self) {
-        if self.params.rewind.swap(false, Ordering::Relaxed) {
+        self.jumped = self.params.rewind.swap(false, Ordering::Relaxed);
+        if self.jumped {
             self.position = 0;
         }
 
+        let was_playing = self.playing;
         self.playing = self.params.playing.load(Ordering::Relaxed);
+        self.stopped = was_playing && !self.playing;
         self.set_bpm(self.params.bpm.get() as f64);
 
         self.params.position.store(self.position, Ordering::Relaxed);
@@ -80,6 +89,21 @@ impl Transport {
 
         self.position = (self.position as f64 * self.bpm / bpm).round() as u64;
         self.bpm = bpm;
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.playing
+    }
+
+    /// Whether the playhead was moved this buffer (sent back to the start),
+    /// so whatever plays along it has to find its place again.
+    pub fn jumped(&self) -> bool {
+        self.jumped
+    }
+
+    /// Whether playing stopped this buffer, so held notes can be released.
+    pub fn stopped(&self) -> bool {
+        self.stopped
     }
 
     pub fn advance(&mut self, frames: u64) {
@@ -188,6 +212,32 @@ mod tests {
 
         assert_eq!(transport.position_in_beats(), 0.0);
         assert!(!transport.params.rewind.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn rewind_counts_as_a_jump_for_one_buffer() {
+        let mut transport = transport_at(120.0, 36000);
+        assert!(!transport.jumped());
+
+        transport.params.rewind.store(true, Ordering::Relaxed);
+        transport.begin_buffer();
+        assert!(transport.jumped());
+
+        transport.begin_buffer();
+        assert!(!transport.jumped());
+    }
+
+    #[test]
+    fn stopping_is_seen_for_one_buffer() {
+        let mut transport = transport_at(120.0, 1000);
+        assert!(!transport.stopped());
+
+        transport.params.playing.store(false, Ordering::Relaxed);
+        transport.begin_buffer();
+        assert!(transport.stopped());
+
+        transport.begin_buffer();
+        assert!(!transport.stopped());
     }
 
     #[test]
