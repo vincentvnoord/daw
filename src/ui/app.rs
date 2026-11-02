@@ -10,7 +10,9 @@ use crate::{
         input_panel::InputPanel,
         keyboard::{self, key_to_note_event},
         mixer_panel::MixerPanel,
+        piano_roll::PianoRoll,
         theme,
+        timeline::Timeline,
         track_panel::{self, TrackAction},
         transport_panel,
         widgets::piano::piano,
@@ -29,6 +31,9 @@ pub struct App {
     mouse_note: Option<u8>,
     mixer_panel: MixerPanel,
     input_panel: InputPanel,
+    timeline: Timeline,
+    /// The sequence open for editing, shown instead of the instrument editor.
+    piano_roll: Option<PianoRoll>,
 }
 
 impl App {
@@ -40,6 +45,8 @@ impl App {
             mouse_note: None,
             mixer_panel: MixerPanel::default(),
             input_panel: InputPanel::default(),
+            timeline: Timeline::default(),
+            piano_roll: None,
         }
     }
 
@@ -185,9 +192,17 @@ impl eframe::App for App {
             .frame(egui::Frame::new().inner_margin(16))
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
-                track_action = track_panel::show(ui, &self.project, self.active);
+                track_action =
+                    track_panel::show(ui, &self.project, self.active, &mut self.timeline);
                 ui.add_space(theme::GAP);
-                editor_panel::show(ui, &mut self.project, self.active);
+                match &mut self.piano_roll {
+                    Some(roll) => {
+                        if !roll.show(ui, &mut self.project) {
+                            self.piano_roll = None;
+                        }
+                    }
+                    None => editor_panel::show(ui, &mut self.project, self.active),
+                }
             });
 
         if let Some(device) = new_input {
@@ -207,6 +222,16 @@ impl eframe::App for App {
                 }
             }
             Some(TrackAction::AddSample) => self.add_sample(),
+            Some(TrackAction::MovePlacement {
+                from,
+                index,
+                to,
+                start,
+            }) => self.project.move_placement(from, index, to, start),
+            Some(TrackAction::OpenSequence { track, sequence }) => {
+                self.set_active(track);
+                self.piano_roll = Some(PianoRoll::new(sequence, track));
+            }
             None => {}
         }
 

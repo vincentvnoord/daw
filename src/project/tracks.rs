@@ -7,7 +7,7 @@ use crate::{
         studio::{MAX_INSTRUMENTS, StudioCommand, instrument::InstrumentSlot},
         synth::Synth,
     },
-    project::{InstrumentHandle, InstrumentKind, Project, unique_name},
+    project::{InstrumentHandle, InstrumentKind, Placement, Project, unique_name},
 };
 
 /// A row on the timeline: one instrument of its own, playing into a mixer
@@ -15,6 +15,8 @@ use crate::{
 pub struct Track {
     pub name: String,
     pub instrument: InstrumentHandle,
+    /// Where sequences play on this track, in no particular order.
+    pub placements: Vec<Placement>,
 }
 
 impl Track {
@@ -93,6 +95,7 @@ impl Project {
                 notes,
                 params,
             },
+            placements: Vec::new(),
         });
         Some(self.tracks.len() - 1)
     }

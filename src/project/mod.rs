@@ -22,11 +22,13 @@ mod channels;
 pub mod default;
 mod inputs;
 mod instruments;
+mod timeline;
 mod tracks;
 
 pub use channels::ChannelHandle;
 pub use inputs::{InputDevice, InputHandle, input_devices};
 pub use instruments::{InstrumentHandle, InstrumentKind};
+pub use timeline::{Note, Placement, Sequence};
 pub use tracks::Track;
 
 /// How many changes from the UI can wait for the audio thread. The garbage
@@ -46,6 +48,8 @@ pub struct Project {
     pub channels: Vec<ChannelHandle>,
     /// The tracks, top to bottom. Each owns one instrument.
     pub tracks: Vec<Track>,
+    /// Every sequence in the project, placed or not.
+    pub sequences: Vec<Sequence>,
     pub inputs: Vec<InputHandle>,
     /// Sends changes to the studio on the audio thread.
     pub commands: Producer<StudioCommand>,
@@ -83,6 +87,7 @@ impl Project {
             metronome,
             channels: Vec::new(),
             tracks: Vec::new(),
+            sequences: Vec::new(),
             inputs: Vec::new(),
             commands,
             garbage,
