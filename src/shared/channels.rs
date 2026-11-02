@@ -38,7 +38,11 @@ impl AppParams {
 
         // built here so the audio thread only has to push it into the mixer
         let (channel, params) = Channel::create(gain);
-        if self.commands.push(StudioCommand::AddChannel(channel)).is_err() {
+        if self
+            .commands
+            .push(StudioCommand::AddChannel(channel))
+            .is_err()
+        {
             return None;
         }
 
@@ -55,7 +59,11 @@ impl AppParams {
     /// Removes a mixer channel while the audio is running. Instruments and
     /// inputs that played into it get no output.
     pub fn remove_channel(&mut self, id: ChannelId) {
-        if self.commands.push(StudioCommand::RemoveChannel(id)).is_err() {
+        if self
+            .commands
+            .push(StudioCommand::RemoveChannel(id))
+            .is_err()
+        {
             return;
         }
 

@@ -8,6 +8,7 @@ use crate::{
         sampler::{Sampler, VOICES, sample::Sample},
         studio::studio::Studio,
         synth::Synth,
+        transport::{TransportParams, metronome::MetronomeParams},
     },
     helpers::AtomicF32,
     shared::{AppParams, ChannelHandle, InstrumentHandle, InstrumentKind},
@@ -28,9 +29,18 @@ pub fn default_studio(sample_rate: f32) -> (Studio, AppParams) {
         gain: AtomicF32::new(0.5),
         meter: Meter::new(),
     });
+    let transport = Arc::new(TransportParams::new());
+    let metronome = Arc::new(MetronomeParams::new());
     let (commands, command_queue) = RingBuffer::new(COMMAND_QUEUE_SIZE);
     let (garbage_bin, garbage) = RingBuffer::new(COMMAND_QUEUE_SIZE);
-    let mut studio = Studio::new(Arc::clone(&mixer), command_queue, garbage_bin);
+    let mut studio = Studio::new(
+        Arc::clone(&mixer),
+        Arc::clone(&transport),
+        Arc::clone(&metronome),
+        command_queue,
+        garbage_bin,
+        sample_rate,
+    );
 
     let drums = studio.add_channel(DEFAULT_GAIN);
     let keys = studio.add_channel(DEFAULT_GAIN);
@@ -46,6 +56,8 @@ pub fn default_studio(sample_rate: f32) -> (Studio, AppParams) {
     let params = AppParams {
         sample_rate,
         mixer,
+        transport,
+        metronome,
         channels: vec![
             ChannelHandle {
                 name: "Drums".to_owned(),

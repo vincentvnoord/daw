@@ -30,8 +30,10 @@ impl egui::Widget for Meter {
         // same outer size and track as a Fader of the same height, so they line up
         let text_h = 14.0;
         let cap_h = 14.0;
-        let (rect, response) =
-            ui.allocate_exact_size(vec2(WIDTH, self.height + 2.0 * (text_h + 6.0)), Sense::hover());
+        let (rect, response) = ui.allocate_exact_size(
+            vec2(WIDTH, self.height + 2.0 * (text_h + 6.0)),
+            Sense::hover(),
+        );
         let track = Rect::from_center_size(rect.center(), vec2(WIDTH, self.height - cap_h));
 
         if ui.is_rect_visible(rect) {

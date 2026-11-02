@@ -91,7 +91,11 @@ impl AppParams {
 
         let channel = self.add_channel(name.clone());
         let (slot, notes, params) = InstrumentSlot::create(instrument, channel);
-        if self.commands.push(StudioCommand::AddInstrument(slot)).is_err() {
+        if self
+            .commands
+            .push(StudioCommand::AddInstrument(slot))
+            .is_err()
+        {
             return None;
         }
 

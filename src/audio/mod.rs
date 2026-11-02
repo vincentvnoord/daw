@@ -11,3 +11,4 @@ pub mod sequence;
 pub mod source;
 pub mod studio;
 pub mod synth;
+pub mod transport;

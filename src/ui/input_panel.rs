@@ -81,7 +81,11 @@ fn input_card(ui: &mut egui::Ui, index: usize, input: &InputHandle, params: &App
         ui.label(
             RichText::new(format!("{state} · → {output}"))
                 .font(theme::value_font())
-                .color(if enabled { theme::TEXT } else { theme::TEXT_DIM }),
+                .color(if enabled {
+                    theme::TEXT
+                } else {
+                    theme::TEXT_DIM
+                }),
         );
     })
     .on_hover_text("Click to turn on or off, right-click for trim and output");
@@ -93,8 +97,7 @@ fn input_card(ui: &mut egui::Ui, index: usize, input: &InputHandle, params: &App
     // trim and route are atomics, so they can be changed right here
     response.context_menu(|ui| {
         ui.add(
-            Knob::new(&input.params.trim, 1.0..=MAX_TRIM, "Trim", Unit::Decibels)
-                .logarithmic(true),
+            Knob::new(&input.params.trim, 1.0..=MAX_TRIM, "Trim", Unit::Decibels).logarithmic(true),
         );
         ui.separator();
         ui.label(
@@ -104,12 +107,18 @@ fn input_card(ui: &mut egui::Ui, index: usize, input: &InputHandle, params: &App
         );
         for channel in &params.channels {
             let id = channel.id();
-            if ui.selectable_label(current == Some(id), &channel.name).clicked() {
+            if ui
+                .selectable_label(current == Some(id), &channel.name)
+                .clicked()
+            {
                 input.params.route.set_channel(Some(id));
                 ui.close();
             }
         }
-        if ui.selectable_label(current.is_none(), "No output").clicked() {
+        if ui
+            .selectable_label(current.is_none(), "No output")
+            .clicked()
+        {
             input.params.route.set_channel(None);
             ui.close();
         }

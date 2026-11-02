@@ -6,4 +6,5 @@ mod keyboard;
 mod mixer_panel;
 mod synth_panel;
 pub mod theme;
+mod transport_panel;
 mod widgets;

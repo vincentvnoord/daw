@@ -50,8 +50,12 @@ pub fn list_card(
 
     // drawn on top afterwards, so hovering doesn't shift the layout
     if response.hovered() {
-        ui.painter()
-            .rect_stroke(rect, radius, Stroke::new(1.0, theme::ACCENT), StrokeKind::Inside);
+        ui.painter().rect_stroke(
+            rect,
+            radius,
+            Stroke::new(1.0, theme::ACCENT),
+            StrokeKind::Inside,
+        );
     }
 
     response
@@ -86,9 +90,15 @@ pub fn menu_option(ui: &mut egui::Ui, title: &str, description: &str) -> bool {
     let layout = |text: RichText, wrap| {
         egui::WidgetText::from(text).into_galley(ui, Some(wrap), text_width, egui::TextStyle::Body)
     };
-    let title = layout(RichText::new(title).size(13.0), egui::TextWrapMode::Truncate);
+    let title = layout(
+        RichText::new(title).size(13.0),
+        egui::TextWrapMode::Truncate,
+    );
     // the description wraps onto more lines and the row grows with it
-    let description = layout(RichText::new(description).size(10.5), egui::TextWrapMode::Wrap);
+    let description = layout(
+        RichText::new(description).size(10.5),
+        egui::TextWrapMode::Wrap,
+    );
 
     let description_height = if description.is_empty() {
         0.0
@@ -102,7 +112,11 @@ pub fn menu_option(ui: &mut egui::Ui, title: &str, description: &str) -> bool {
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         if response.hovered() {
-            painter.rect_filled(rect, CornerRadius::same(theme::RADIUS - 2), theme::SURFACE_HI);
+            painter.rect_filled(
+                rect,
+                CornerRadius::same(theme::RADIUS - 2),
+                theme::SURFACE_HI,
+            );
         }
 
         let title_pos = rect.left_top() + PADDING;

@@ -108,9 +108,18 @@ fn install_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
 
     for (name, bytes) in [
-        ("geist", &include_bytes!("../../assets/fonts/Geist-Regular.ttf")[..]),
-        (MEDIUM, &include_bytes!("../../assets/fonts/Geist-Medium.ttf")[..]),
-        ("geist-mono", &include_bytes!("../../assets/fonts/GeistMono-Regular.ttf")[..]),
+        (
+            "geist",
+            &include_bytes!("../../assets/fonts/Geist-Regular.ttf")[..],
+        ),
+        (
+            MEDIUM,
+            &include_bytes!("../../assets/fonts/Geist-Medium.ttf")[..],
+        ),
+        (
+            "geist-mono",
+            &include_bytes!("../../assets/fonts/GeistMono-Regular.ttf")[..],
+        ),
     ] {
         fonts
             .font_data

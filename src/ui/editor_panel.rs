@@ -42,7 +42,10 @@ pub fn show(ui: &mut egui::Ui, params: &mut AppParams, active: usize) {
             // name the channel after the instrument that asked for it
             let name = params.instruments[active].name.clone();
             if let Some(id) = params.add_channel(name) {
-                params.instruments[active].params.route.set_channel(Some(id));
+                params.instruments[active]
+                    .params
+                    .route
+                    .set_channel(Some(id));
             }
         }
         None => {}
@@ -77,11 +80,17 @@ fn header(
                 .show_ui(ui, |ui| {
                     for channel in &params.channels {
                         let id = channel.id();
-                        if ui.selectable_label(current == Some(id), &channel.name).clicked() {
+                        if ui
+                            .selectable_label(current == Some(id), &channel.name)
+                            .clicked()
+                        {
                             *choice = Some(OutputChoice::Channel(Some(id)));
                         }
                     }
-                    if ui.selectable_label(current.is_none(), "No output").clicked() {
+                    if ui
+                        .selectable_label(current.is_none(), "No output")
+                        .clicked()
+                    {
                         *choice = Some(OutputChoice::Channel(None));
                     }
                     ui.separator();

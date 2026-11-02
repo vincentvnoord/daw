@@ -55,10 +55,9 @@ impl MixerPanel {
 
                         // as tall as the strips next to it
                         let height = ui.min_rect().height();
-                        let add = egui::Button::new(
-                            RichText::new("+").size(20.0).color(theme::TEXT_DIM),
-                        )
-                        .min_size(egui::vec2(44.0, height));
+                        let add =
+                            egui::Button::new(RichText::new("+").size(20.0).color(theme::TEXT_DIM))
+                                .min_size(egui::vec2(44.0, height));
                         let can_add = params.channels.len() < MAX_CHANNELS;
                         if ui
                             .add_enabled(can_add, add)
@@ -79,12 +78,19 @@ impl MixerPanel {
                 ui.vertical(|ui| {
                     strip(ui, "Master", &params.mixer.gain, None, self.master_level);
 
-                    let clip = egui::Button::new(
-                        RichText::new("CLIP")
-                            .font(theme::label_font())
-                            .color(if self.clipped { theme::TEXT } else { theme::TEXT_DIM }),
-                    )
-                    .fill(if self.clipped { theme::CLIP } else { theme::SURFACE });
+                    let clip =
+                        egui::Button::new(RichText::new("CLIP").font(theme::label_font()).color(
+                            if self.clipped {
+                                theme::TEXT
+                            } else {
+                                theme::TEXT_DIM
+                            },
+                        ))
+                        .fill(if self.clipped {
+                            theme::CLIP
+                        } else {
+                            theme::SURFACE
+                        });
                     if ui.add(clip).on_hover_text("Click to reset").clicked() {
                         self.clipped = false;
                     }

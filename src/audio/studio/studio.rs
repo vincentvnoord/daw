@@ -4,6 +4,7 @@ use rtrb::{Consumer, Producer};
 
 use crate::{
     audio::{
+        frame::Frame,
         instrument::Instrument,
         mixer::{
             Mixer, MixerParams,
@@ -13,6 +14,10 @@ use crate::{
         studio::{
             input::InputSlot,
             instrument::{InstrumentParams, InstrumentSlot},
+        },
+        transport::{
+            Transport, TransportParams,
+            metronome::{Metronome, MetronomeParams},
         },
     },
     events::NoteEvent,
@@ -47,13 +52,18 @@ pub struct Studio {
     mixer: Mixer,
     commands: Consumer<StudioCommand>,
     garbage: Producer<Garbage>,
+    transport: Transport,
+    metronome: Metronome,
 }
 
 impl Studio {
     pub fn new(
         mixer_params: Arc<MixerParams>,
+        transport_params: Arc<TransportParams>,
+        metronome_params: Arc<MetronomeParams>,
         commands: Consumer<StudioCommand>,
         garbage: Producer<Garbage>,
+        sample_rate: f32,
     ) -> Self {
         Self {
             instruments: Vec::with_capacity(MAX_INSTRUMENTS),
@@ -61,6 +71,8 @@ impl Studio {
             mixer: Mixer::new(mixer_params),
             commands,
             garbage,
+            transport: Transport::new(transport_params, sample_rate as f64),
+            metronome: Metronome::new(metronome_params, sample_rate),
         }
     }
 
@@ -141,9 +153,11 @@ impl StereoSource for Studio {
         }
 
         self.mixer.begin_buffer();
+        self.transport.begin_buffer();
+        self.metronome.begin_buffer();
     }
 
-    fn next_frame(&mut self) -> crate::audio::frame::Frame {
+    fn next_frame(&mut self) -> Frame {
         for slot in &mut self.instruments {
             let sample = slot.source.next_sample();
             if let Some(ch) = slot.output {
@@ -158,6 +172,14 @@ impl StereoSource for Studio {
             }
         }
 
+        let click = self.metronome.next_sample(&self.transport);
+        self.transport.advance(1);
+
+        // the click skips the mixer, so it never ends up in the mix
         self.mixer.next_frame()
+            + Frame {
+                left: click,
+                right: click,
+            }
     }
 }

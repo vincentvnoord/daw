@@ -10,6 +10,7 @@ use rtrb::{Consumer, Producer};
 use crate::audio::{
     mixer::MixerParams,
     studio::studio::{Garbage, StudioCommand},
+    transport::{TransportParams, metronome::MetronomeParams},
 };
 
 mod channels;
@@ -24,6 +25,8 @@ pub struct AppParams {
     /// Sample rate of the audio device, needed to build instruments.
     pub sample_rate: f32,
     pub mixer: Arc<MixerParams>,
+    pub transport: Arc<TransportParams>,
+    pub metronome: Arc<MetronomeParams>,
     /// The mixer channels, in mixer order.
     pub channels: Vec<ChannelHandle>,
     pub instruments: Vec<InstrumentHandle>,

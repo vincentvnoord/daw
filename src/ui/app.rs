@@ -11,7 +11,7 @@ use crate::{
         instrument_panel::{self, InstrumentAction},
         keyboard::{self, key_to_note_event},
         mixer_panel::MixerPanel,
-        theme,
+        theme, transport_panel,
         widgets::piano::piano,
     },
 };
@@ -71,7 +71,12 @@ impl App {
     /// Switches the keyboard to another instrument. Releases every held note
     /// on the old one first, otherwise those notes would never get a note off.
     fn set_active(&mut self, index: usize) {
-        let held: Vec<u8> = self.held_keys.iter().copied().chain(self.mouse_note).collect();
+        let held: Vec<u8> = self
+            .held_keys
+            .iter()
+            .copied()
+            .chain(self.mouse_note)
+            .collect();
         for n in held {
             self.send(NoteEvent::Off(n));
         }
@@ -117,6 +122,8 @@ impl App {
             let (dot, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
             ui.painter().circle_filled(dot.center(), 5.0, theme::ACCENT);
             ui.label(RichText::new("Vincent Studio").heading().strong());
+            ui.add_space(theme::GAP * 2.0);
+            transport_panel::show(ui, &self.params);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let held = self.held_keys.len() + self.mouse_note.is_some() as usize;
                 ui.label(
@@ -147,6 +154,14 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.params.collect_garbage();
         self.handle_keys(ui);
+
+        // not while typing in a field, like the tempo. Consumed, so a focused
+        // button doesn't take the same press as a click.
+        if !ui.ctx().egui_wants_keyboard_input()
+            && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Space))
+        {
+            self.params.transport.toggle_playing();
+        }
 
         egui::Panel::top("header")
             .frame(theme::panel_frame())

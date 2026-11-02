@@ -54,9 +54,9 @@ pub fn open_input(
 /// How many inputs the device has: the most channels any of its configs
 /// records.
 pub fn input_channels(device: &cpal::Device) -> usize {
-    device
-        .supported_input_configs()
-        .map_or(0, |configs| configs.map(|c| c.channels() as usize).max().unwrap_or(0))
+    device.supported_input_configs().map_or(0, |configs| {
+        configs.map(|c| c.channels() as usize).max().unwrap_or(0)
+    })
 }
 
 fn build<T>(
