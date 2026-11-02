@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use eframe::egui::{self, Align, CornerRadius, Layout, Margin, RichText, Stroke};
 
 use crate::{
@@ -140,7 +138,8 @@ fn instrument_controls(ui: &mut egui::Ui, instrument: &InstrumentHandle) {
     }
 }
 
-/// Which input the track listens to, whether it's heard, and its trim.
+/// Which input the track listens to, and its trim. Muting is on the track's
+/// header.
 /// Returns the input picked in the dropdown, if one was: an index in
 /// `devices`, or `None` for no input.
 fn audio_controls(
@@ -175,17 +174,6 @@ fn audio_controls(
         // looked up as the list opens: asking the system every frame is slow
         if combo.response.clicked() {
             *devices = input_devices();
-        }
-
-        ui.add_space(theme::GAP);
-        let params = &audio.params;
-        let mut monitoring = params.enabled.load(Ordering::Relaxed);
-        if ui
-            .toggle_value(&mut monitoring, "Monitor")
-            .on_hover_text("Hear the input through the track's channel")
-            .changed()
-        {
-            params.enabled.store(monitoring, Ordering::Relaxed);
         }
     });
 

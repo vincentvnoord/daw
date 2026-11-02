@@ -10,6 +10,8 @@ pub const BG: Color32 = Color32::from_gray(10);
 pub const PANEL: Color32 = Color32::from_gray(17);
 pub const SURFACE: Color32 = Color32::from_gray(24);
 pub const SURFACE_HI: Color32 = Color32::from_gray(38);
+/// The picked item in a list or dropdown.
+pub const SELECTED: Color32 = Color32::from_gray(56);
 pub const BORDER: Color32 = Color32::from_gray(44);
 pub const TEXT: Color32 = Color32::from_gray(237);
 pub const TEXT_DIM: Color32 = Color32::from_gray(138);
@@ -41,9 +43,10 @@ pub fn apply(ctx: &egui::Context) {
         v.extreme_bg_color = BG;
         v.faint_bg_color = SURFACE;
         v.override_text_color = Some(TEXT);
-        v.selection.bg_fill = ACCENT;
-        // text on a selected item sits on the white accent, so it has to be dark
-        v.selection.stroke = Stroke::new(1.0, BG);
+        // a step lighter than hover, so the picked item in a list stands out
+        // while its text, white like all text, stays readable
+        v.selection.bg_fill = SELECTED;
+        v.selection.stroke = Stroke::new(1.0, TEXT);
         v.slider_trailing_fill = true;
 
         let w = &mut v.widgets;

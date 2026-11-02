@@ -18,8 +18,9 @@ use crate::{
 pub const MAX_TRIM: f32 = 15.85;
 
 pub struct InputParams {
-    /// Whether the live input is heard through the channel: monitoring.
-    pub enabled: AtomicBool,
+    /// Whether the live input is silenced. It's heard through the channel
+    /// by default; muting is how you stop it.
+    pub muted: AtomicBool,
     /// Gain applied to the input before it reaches its channel, from 1.0
     /// (as recorded) to `MAX_TRIM`.
     pub trim: AtomicF32,
@@ -33,7 +34,7 @@ pub struct InputParams {
 impl InputParams {
     pub fn new(channel: Option<ChannelId>) -> Self {
         Self {
-            enabled: AtomicBool::new(false),
+            muted: AtomicBool::new(false),
             trim: AtomicF32::new(1.0),
             route: ChannelRoute::new(channel),
             backlog: AtomicU32::new(0),
@@ -48,7 +49,7 @@ pub struct InputSlot {
     /// Samples from the recording device, or `None` with no input chosen.
     samples: Option<Consumer<f32>>,
     pub output: Option<usize>,
-    /// The trim, or 0 while monitoring is off. Read once per buffer.
+    /// The trim, or 0 while muted. Read once per buffer.
     gain: f32,
     /// Samples the input ran dry on, copied to the params once per buffer.
     underruns: u32,
@@ -95,13 +96,13 @@ impl InputSlot {
         std::mem::replace(&mut self.samples, samples)
     }
 
-    /// Picks up the trim and monitoring, and throws away input that has
+    /// Picks up the trim and mute, and throws away input that has
     /// piled up past what a buffer of `frames` frames needs.
     pub fn prepare(&mut self, frames: usize) {
-        self.gain = if self.params.enabled.load(Ordering::Relaxed) {
-            self.params.trim.get()
-        } else {
+        self.gain = if self.params.muted.load(Ordering::Relaxed) {
             0.0
+        } else {
+            self.params.trim.get()
         };
 
         let mut backlog = 0;
@@ -129,7 +130,7 @@ impl AudioSource for InputSlot {
             return 0.0;
         };
 
-        // drained even when off, so turning it on doesn't play old audio
+        // drained even when muted, so unmuting doesn't play old audio
         match samples.pop() {
             Ok(sample) => {
                 self.started = true;
@@ -149,10 +150,9 @@ impl AudioSource for InputSlot {
 mod tests {
     use super::*;
 
-    /// A monitored slot with `queued` samples waiting, numbered from 0.
+    /// A slot with `queued` samples waiting, numbered from 0.
     fn slot_with(queued: usize) -> InputSlot {
-        let (mut slot, params) = InputSlot::create(None);
-        params.enabled.store(true, Ordering::Relaxed);
+        let (mut slot, _) = InputSlot::create(None);
         let (mut producer, consumer) = input_queue();
         for i in 0..queued {
             producer.push(i as f32).unwrap();

@@ -14,6 +14,8 @@ pub enum Icon {
     Rewind,
     /// A trapezoid body with a pendulum leaning to the right.
     Metronome,
+    /// A speaker: a small box with a cone opening to the right.
+    Speaker,
 }
 
 /// A button showing an icon drawn with shapes. `selected` fills it, like a
@@ -24,6 +26,9 @@ pub struct IconButton {
 }
 
 impl IconButton {
+    /// Every icon button is this size, so one can be placed by hand.
+    pub const SIZE: egui::Vec2 = SIZE;
+
     pub fn new(icon: Icon) -> Self {
         Self {
             icon,
@@ -43,11 +48,17 @@ impl egui::Widget for IconButton {
 
         if ui.is_rect_visible(rect) {
             let visuals = ui.style().interact_selectable(&response, self.selected);
+            // pressed toggles are white, brighter than a selected list item
+            let fill = if self.selected {
+                theme::ACCENT
+            } else {
+                visuals.weak_bg_fill
+            };
             let painter = ui.painter();
             painter.rect(
                 rect,
                 theme::RADIUS,
-                visuals.weak_bg_fill,
+                fill,
                 visuals.bg_stroke,
                 egui::StrokeKind::Inside,
             );
@@ -115,6 +126,18 @@ fn shapes(icon: Icon, r: Rect, color: Color32) -> Vec<Shape> {
                         pos2(r.right(), r.top() + r.height() * 0.15),
                     ],
                     stroke,
+                ),
+            ]
+        }
+        Icon::Speaker => {
+            // two shapes: the box and cone together aren't convex
+            let at = |x: f32, y: f32| pos2(r.left() + r.width() * x, r.top() + r.height() * y);
+            vec![
+                Shape::rect_filled(Rect::from_min_max(at(0.1, 0.3), at(0.4, 0.7)), 0.0, color),
+                Shape::convex_polygon(
+                    vec![at(0.4, 0.3), at(0.8, 0.0), at(0.8, 1.0), at(0.4, 0.7)],
+                    color,
+                    Stroke::NONE,
                 ),
             ]
         }
