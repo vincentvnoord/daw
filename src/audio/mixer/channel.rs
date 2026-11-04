@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     atomic::AtomicF32,
-    audio::{frame::Frame, mixer::meter::Meter},
+    audio::{frame::Frame, mixer::meter::Meter, source::MAX_BLOCK_FRAMES},
 };
 
 /// Gain and pan a new channel starts with.
@@ -45,7 +45,7 @@ pub struct ChannelParams {
 }
 
 pub struct Channel {
-    input: f32,
+    input: Vec<f32>,
     params: Arc<ChannelParams>,
     gain: f32,
     pan_l: f32,
@@ -70,7 +70,7 @@ impl Channel {
         let gain = params.gain.get();
         let (pan_l, pan_r) = Self::pan_gains(params.pan.get());
         Channel {
-            input: 0.0,
+            input: vec![0.0; MAX_BLOCK_FRAMES],
             params,
             gain,
             peak: 0.0,
@@ -83,8 +83,11 @@ impl Channel {
         self.params.id
     }
 
-    pub fn add_input(&mut self, sample: f32) {
-        self.input += sample;
+    /// Adds `samples` into the input, starting `offset` frames into the block.
+    pub fn add_input(&mut self, offset: usize, samples: &[f32]) {
+        for (input, sample) in self.input[offset..].iter_mut().zip(samples) {
+            *input += sample;
+        }
     }
 
     pub fn begin_buffer(&mut self) {
@@ -99,18 +102,18 @@ impl Channel {
         self.pan_r = pan_r;
     }
 
-    pub fn process(&mut self) -> Frame {
-        let mono = self.input * self.gain;
+    /// Adds the input, gained and panned, into `out`, and clears it.
+    pub fn add_to(&mut self, out: &mut [Frame]) {
+        for (frame, input) in out.iter_mut().zip(&mut self.input) {
+            let mono = *input * self.gain;
+            let left = mono * self.pan_l;
+            let right = mono * self.pan_r;
 
-        let frame = Frame {
-            left: mono * self.pan_l,
-            right: mono * self.pan_r,
-        };
-
-        self.input = 0.0;
-        self.peak = self.peak.max(frame.left.abs().max(frame.right.abs()));
-
-        frame
+            frame.left += left;
+            frame.right += right;
+            self.peak = self.peak.max(left.abs().max(right.abs()));
+            *input = 0.0;
+        }
     }
 
     fn pan_gains(pan: f32) -> (f32, f32) {

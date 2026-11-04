@@ -36,11 +36,13 @@ impl Voice {
         self.env.release();
     }
 
-    pub fn next_sample(&mut self) -> f32 {
-        let raw = self.osc.next_sample();
-        let filtered = self.filter.process(raw);
+    pub fn add_to(&mut self, out: &mut [f32]) {
+        for sample in out {
+            let raw = self.osc.next_sample();
+            let filtered = self.filter.process(raw);
 
-        filtered * self.env.next_value()
+            *sample += filtered * self.env.next_value();
+        }
     }
 
     pub fn is_idle(&self) -> bool {

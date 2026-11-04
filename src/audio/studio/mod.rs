@@ -17,7 +17,7 @@ use crate::audio::{
     },
     note::NoteEvent,
     schedule::Schedule,
-    source::{AudioSource, StereoSource},
+    source::{AudioSource, MAX_BLOCK_FRAMES, StereoSource},
     studio::{clips::Clips, input::InputSlot, instrument::InstrumentSlot},
     transport::{
         Transport, TransportParams,
@@ -80,6 +80,7 @@ pub struct Studio {
     metronome: Metronome,
     schedule: Schedule,
     stats: Arc<StudioStats>,
+    scratch: Vec<f32>,
 }
 
 impl Studio {
@@ -102,6 +103,7 @@ impl Studio {
             metronome: Metronome::new(metronome_params, sample_rate),
             schedule: Schedule::empty(),
             stats,
+            scratch: vec![0.0; MAX_BLOCK_FRAMES],
         }
     }
 
@@ -167,6 +169,55 @@ impl Studio {
         }
     }
 
+    fn play_due_notes(&mut self) {
+        if !self.transport.is_playing() {
+            return;
+        }
+
+        let position = self.transport.position();
+        while let Some(beat) = self.schedule.next_beat() {
+            if self.transport.sample_at(beat) > position {
+                break;
+            }
+            if let Some((instrument, event)) = self.schedule.take_next() {
+                play(&mut self.instruments, instrument, event);
+            }
+        }
+    }
+
+    fn frames_to_next_note(&self) -> Option<usize> {
+        if !self.transport.is_playing() {
+            return None;
+        }
+
+        let beat = self.schedule.next_beat()?;
+        Some((self.transport.sample_at(beat) - self.transport.position()) as usize)
+    }
+
+    fn render_instruments(&mut self, from: usize, to: usize) {
+        let scratch = &mut self.scratch[..to - from];
+        for slot in &mut self.instruments {
+            slot.source.process(scratch);
+            if let Some(ch) = slot.output {
+                self.mixer.add_input(ch, from, scratch);
+            }
+        }
+    }
+
+    fn render_inputs(&mut self, frames: usize, start: u64) {
+        let scratch = &mut self.scratch[..frames];
+        let playing = self.transport.is_playing();
+        for slot in &mut self.inputs {
+            slot.process(scratch);
+            if playing {
+                slot.add_clips(scratch, start);
+            }
+            if let Some(ch) = slot.output {
+                self.mixer.add_input(ch, 0, scratch);
+            }
+        }
+    }
+
     fn discard(&mut self, garbage: Garbage) {
         // if the UI hasn't emptied the queue it gets dropped here after all,
         // which is better than keeping it forever
@@ -205,46 +256,27 @@ impl StereoSource for Studio {
         }
     }
 
-    fn next_frame(&mut self) -> Frame {
-        // before the instruments make their sample, so each note starts on
-        // the sample its beat falls on
-        if self.transport.is_playing() {
-            let beat = self.transport.position_in_beats();
-            while let Some((instrument, event)) = self.schedule.next_due(beat) {
-                play(&mut self.instruments, instrument, event);
-            }
+    fn process(&mut self, out: &mut [Frame]) {
+        let start = self.transport.position();
+        let frames = out.len();
+
+        // instruments render up to each scheduled note, so the note starts
+        // on the sample its beat falls on
+        let mut done = 0;
+        while done < frames {
+            self.play_due_notes();
+            let end = self
+                .frames_to_next_note()
+                .map_or(frames, |n| (done + n).min(frames));
+            self.render_instruments(done, end);
+            self.transport.advance((end - done) as u64);
+            done = end;
         }
 
-        for slot in &mut self.instruments {
-            let sample = slot.source.next_sample();
-            if let Some(ch) = slot.output {
-                self.mixer.add_input(ch, sample);
-            }
-        }
-
-        let playhead = self
-            .transport
-            .is_playing()
-            .then(|| self.transport.position());
-        for slot in &mut self.inputs {
-            let mut sample = slot.next_sample();
-            if let Some(position) = playhead {
-                sample += slot.clip_sample(position);
-            }
-            if let Some(ch) = slot.output {
-                self.mixer.add_input(ch, sample);
-            }
-        }
-
-        let click = self.metronome.next_sample(&self.transport);
-        self.transport.advance(1);
-
+        self.render_inputs(frames, start);
+        self.mixer.process(out);
         // the click skips the mixer, so it never ends up in the mix
-        self.mixer.next_frame()
-            + Frame {
-                left: click,
-                right: click,
-            }
+        self.metronome.add_to(out, &self.transport, start);
     }
 }
 
@@ -252,5 +284,102 @@ impl StereoSource for Studio {
 fn play(instruments: &mut [InstrumentSlot], instrument: usize, event: NoteEvent) {
     if let Some(slot) = instruments.get_mut(instrument) {
         slot.source.note(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use rtrb::RingBuffer;
+
+    use super::*;
+    use crate::{
+        atomic::AtomicF32,
+        audio::{
+            instrument::NoteSource, mixer::meter::Meter, schedule::ScheduledNote,
+            studio::instrument::InstrumentParams,
+        },
+    };
+
+    /// Remembers how many frames it had rendered when each note came in.
+    struct Recorder {
+        rendered: usize,
+        notes: Arc<Mutex<Vec<usize>>>,
+    }
+
+    impl AudioSource for Recorder {
+        fn process(&mut self, out: &mut [f32]) {
+            out.fill(0.0);
+            self.rendered += out.len();
+        }
+    }
+
+    impl NoteSource for Recorder {
+        fn note(&mut self, _event: NoteEvent) {
+            self.notes.lock().unwrap().push(self.rendered);
+        }
+    }
+
+    /// A playing studio at 960 Hz and 120 bpm, so a beat is 480 frames,
+    /// with one note scheduled at `beat`.
+    fn studio_with_note_at(beat: f64) -> (Studio, Arc<Mutex<Vec<usize>>>) {
+        let (mut commands, consumer) = RingBuffer::new(8);
+        let (garbage, _) = RingBuffer::new(8);
+        let transport = Arc::new(TransportParams::new());
+        transport.playing.store(true, Ordering::Relaxed);
+
+        let notes = Arc::new(Mutex::new(Vec::new()));
+        let recorder = Recorder {
+            rendered: 0,
+            notes: Arc::clone(&notes),
+        };
+        let slot = InstrumentSlot::new(Arc::new(InstrumentParams::new(None)), Box::new(recorder));
+        let schedule = Schedule::new(vec![ScheduledNote {
+            beat,
+            instrument: 0,
+            event: NoteEvent::On(60),
+        }]);
+        assert!(commands.push(StudioCommand::AddInstrument(slot)).is_ok());
+        assert!(commands.push(StudioCommand::SetSchedule(schedule)).is_ok());
+
+        let studio = Studio::new(
+            Arc::new(MixerParams {
+                gain: AtomicF32::new(1.0),
+                meter: Meter::new(),
+            }),
+            transport,
+            Arc::new(MetronomeParams::new()),
+            consumer,
+            garbage,
+            Arc::new(StudioStats::default()),
+            960.0,
+        );
+
+        (studio, notes)
+    }
+
+    fn render(studio: &mut Studio, frames: usize) {
+        let mut out = vec![Frame::default(); frames];
+        studio.begin_buffer(frames);
+        studio.process(&mut out);
+    }
+
+    #[test]
+    fn scheduled_note_starts_on_its_frame_in_the_middle_of_a_block() {
+        let (mut studio, notes) = studio_with_note_at(0.25);
+        render(&mut studio, 256);
+
+        assert_eq!(*notes.lock().unwrap(), [120]);
+    }
+
+    #[test]
+    fn note_on_a_block_boundary_starts_the_next_block() {
+        let (mut studio, notes) = studio_with_note_at(0.5);
+        render(&mut studio, 240);
+        assert!(notes.lock().unwrap().is_empty());
+
+        render(&mut studio, 240);
+        assert_eq!(*notes.lock().unwrap(), [240]);
     }
 }

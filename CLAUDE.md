@@ -23,7 +23,7 @@ The threads talk in exactly four ways. A new feature picks one of these:
 | `Garbage` queue | audio → UI | anything the studio drops, freed on the UI thread |
 | per-instrument `NoteEvent` ring buffer | UI → audio | live keyboard notes |
 
-Signal flow per sample: instrument slots and input slots (one per audio track) produce mono `f32` → `Mixer::add_input` on the channel their `ChannelRoute` resolves to → `Channel` applies gain and pan into a stereo `Frame` → master gain → metronome click added after the mixer.
+The engine renders in blocks: `begin_buffer` once per device buffer, then `process(out)` over pieces of at most `MAX_BLOCK_FRAMES` (and inside the studio, pieces split at scheduled notes). `process` overwrites `out`; `add_to` sums into it. Signal flow per block: instrument slots and input slots (one per audio track) render mono `f32` into the studio's scratch buffer → `Mixer::add_input` on the channel their `ChannelRoute` resolves to → `Channel` applies gain and pan into stereo `Frame`s → master gain → metronome click added after the mixer.
 
 ## Real-time rules
 

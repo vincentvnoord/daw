@@ -114,8 +114,11 @@ impl AudioSource for Synth {
         }
     }
 
-    fn next_sample(&mut self) -> f32 {
-        self.voices.iter_mut().map(|v| v.next_sample()).sum()
+    fn process(&mut self, out: &mut [f32]) {
+        out.fill(0.0);
+        for voice in &mut self.voices {
+            voice.add_to(out);
+        }
     }
 }
 

@@ -65,9 +65,9 @@ impl Mixer {
         self.channels.iter().position(|c| c.id() == id)
     }
 
-    pub fn add_input(&mut self, channel_idx: usize, input: f32) {
+    pub fn add_input(&mut self, channel_idx: usize, offset: usize, samples: &[f32]) {
         if let Some(ch) = self.channels.get_mut(channel_idx) {
-            ch.add_input(input);
+            ch.add_input(offset, samples);
         }
     }
 
@@ -87,12 +87,16 @@ impl StereoSource for Mixer {
         }
     }
 
-    fn next_frame(&mut self) -> Frame {
-        let sum: Frame = self.channels.iter_mut().map(|c| c.process()).sum();
-        let out = sum * self.gain;
-        self.peak = self.peak.max(out.left.abs().max(out.right.abs()));
+    fn process(&mut self, out: &mut [Frame]) {
+        out.fill(Frame::default());
+        for channel in &mut self.channels {
+            channel.add_to(out);
+        }
 
-        out
+        for frame in out.iter_mut() {
+            *frame = *frame * self.gain;
+            self.peak = self.peak.max(frame.left.abs().max(frame.right.abs()));
+        }
     }
 }
 
@@ -116,6 +120,12 @@ mod tests {
             .collect();
 
         (mixer, ids)
+    }
+
+    fn render(mixer: &mut Mixer, frames: usize) -> Vec<Frame> {
+        let mut out = vec![Frame::default(); frames];
+        mixer.process(&mut out);
+        out
     }
 
     #[test]
@@ -152,10 +162,10 @@ mod tests {
         let (mut mixer, _) = mixer_with(2);
         mixer.begin_buffer(1);
 
-        mixer.add_input(0, 0.25);
-        mixer.add_input(0, 0.25);
-        mixer.add_input(1, 0.5);
-        let frame = mixer.next_frame();
+        mixer.add_input(0, 0, &[0.25]);
+        mixer.add_input(0, 0, &[0.25]);
+        mixer.add_input(1, 0, &[0.5]);
+        let frame = render(&mut mixer, 1)[0];
 
         // centred, each side gets 1/sqrt(2) of the mono signal
         assert!((frame.left - FRAC_1_SQRT_2).abs() < 1e-6);
@@ -163,13 +173,26 @@ mod tests {
     }
 
     #[test]
-    fn inputs_are_cleared_after_each_frame() {
+    fn inputs_are_cleared_after_each_block() {
         let (mut mixer, _) = mixer_with(1);
         mixer.begin_buffer(1);
 
-        mixer.add_input(0, 1.0);
-        mixer.next_frame();
+        mixer.add_input(0, 0, &[1.0]);
+        render(&mut mixer, 1);
 
-        assert_eq!(mixer.next_frame().left, 0.0);
+        assert_eq!(render(&mut mixer, 1)[0].left, 0.0);
+    }
+
+    #[test]
+    fn input_at_an_offset_lands_on_that_frame() {
+        let (mut mixer, _) = mixer_with(1);
+        mixer.begin_buffer(4);
+
+        mixer.add_input(0, 2, &[1.0]);
+        let lefts: Vec<f32> = render(&mut mixer, 4).iter().map(|f| f.left).collect();
+
+        assert_eq!(lefts[..2], [0.0, 0.0]);
+        assert!(lefts[2] > 0.0);
+        assert_eq!(lefts[3], 0.0);
     }
 }

@@ -52,10 +52,14 @@ impl Schedule {
         self.next = self.notes.partition_point(|n| n.beat < beat);
     }
 
-    /// The next note due by `beat`, as (instrument, event). Call it until it
-    /// returns `None` on every sample, with the playhead's position.
-    pub fn next_due(&mut self, beat: f64) -> Option<(usize, NoteEvent)> {
-        let note = *self.notes.get(self.next).filter(|n| n.beat <= beat)?;
+    pub fn next_beat(&self) -> Option<f64> {
+        self.notes.get(self.next).map(|n| n.beat)
+    }
+
+    /// Plays the next note: hands it back as (instrument, event) and keeps
+    /// track of what is sounding.
+    pub fn take_next(&mut self) -> Option<(usize, NoteEvent)> {
+        let note = *self.notes.get(self.next)?;
         self.next += 1;
 
         match note.event {
@@ -114,7 +118,10 @@ mod tests {
 
     /// Every event due by `beat`, as `On(n)` / `Off(n)` labels.
     fn due(schedule: &mut Schedule, beat: f64) -> Vec<String> {
-        std::iter::from_fn(|| schedule.next_due(beat))
+        std::iter::from_fn(|| {
+            schedule.next_beat().filter(|&b| b <= beat)?;
+            schedule.take_next()
+        })
             .map(|(_, event)| format!("{event:?}"))
             .collect()
     }

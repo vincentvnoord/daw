@@ -115,13 +115,11 @@ impl InputSlot {
         self.clips.prepare(transport);
     }
 
-    /// The clips at sample `position` of the transport, or silence while
-    /// muted. Clips play as they are: the trim is for the live input.
-    pub fn clip_sample(&self, position: u64) -> f32 {
-        if self.muted {
-            0.0
-        } else {
-            self.clips.sample_at(position)
+    /// Adds the clips from sample `position` of the transport into `out`,
+    /// unless muted. Clips play as they are: the trim is for the live input.
+    pub fn add_clips(&self, out: &mut [f32], position: u64) {
+        if !self.muted {
+            self.clips.add_to(out, position);
         }
     }
 
@@ -155,25 +153,39 @@ impl InputSlot {
 }
 
 impl AudioSource for InputSlot {
-    fn next_sample(&mut self) -> f32 {
-        let Some(samples) = &mut self.samples else {
-            return 0.0;
+    fn process(&mut self, out: &mut [f32]) {
+        // drained even when muted, so unmuting doesn't play old audio
+        let read = match &mut self.samples {
+            Some(samples) => read_into(samples, out),
+            None => 0,
         };
 
-        // drained even when muted, so unmuting doesn't play old audio
-        match samples.pop() {
-            Ok(sample) => {
-                self.started = true;
-                sample * self.gain
-            }
-            Err(_) => {
-                if self.started {
-                    self.underruns = self.underruns.wrapping_add(1);
-                }
-                0.0
-            }
+        if read > 0 {
+            self.started = true;
         }
+        if self.started {
+            self.underruns = self.underruns.wrapping_add((out.len() - read) as u32);
+        }
+
+        for sample in &mut out[..read] {
+            *sample *= self.gain;
+        }
+        out[read..].fill(0.0);
     }
+}
+
+fn read_into(samples: &mut Consumer<f32>, out: &mut [f32]) -> usize {
+    let n = samples.slots().min(out.len());
+    let Ok(chunk) = samples.read_chunk(n) else {
+        return 0;
+    };
+
+    let (first, second) = chunk.as_slices();
+    out[..first.len()].copy_from_slice(first);
+    out[first.len()..n].copy_from_slice(second);
+    chunk.commit_all();
+
+    n
 }
 
 #[cfg(test)]
@@ -191,6 +203,12 @@ mod tests {
         slot
     }
 
+    fn read(slot: &mut InputSlot, frames: usize) -> Vec<f32> {
+        let mut out = vec![0.0; frames];
+        slot.process(&mut out);
+        out
+    }
+
     #[test]
     fn keeps_at_most_two_buffers_waiting() {
         let mut slot = slot_with(2000);
@@ -204,7 +222,7 @@ mod tests {
         let mut slot = slot_with(2000);
         slot.prepare(256);
 
-        assert_eq!(slot.next_sample(), (2000 - 512) as f32);
+        assert_eq!(read(&mut slot, 1), [(2000 - 512) as f32]);
     }
 
     #[test]
@@ -213,16 +231,14 @@ mod tests {
         slot.prepare(256);
 
         assert_eq!(slot.params.backlog.load(Ordering::Relaxed), 300);
-        assert_eq!(slot.next_sample(), 0.0);
+        assert_eq!(read(&mut slot, 1), [0.0]);
     }
 
     #[test]
     fn running_dry_counts_as_underruns() {
         let mut slot = slot_with(2);
         slot.prepare(256);
-        for _ in 0..5 {
-            slot.next_sample();
-        }
+        read(&mut slot, 5);
         slot.prepare(256);
 
         assert_eq!(slot.params.underruns.load(Ordering::Relaxed), 3);
@@ -232,12 +248,33 @@ mod tests {
     fn running_dry_before_the_input_starts_is_not_an_underrun() {
         let mut slot = slot_with(0);
         slot.prepare(256);
-        for _ in 0..5 {
-            slot.next_sample();
-        }
+        read(&mut slot, 5);
         slot.prepare(256);
 
         assert_eq!(slot.params.underruns.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn input_that_wraps_around_the_ring_is_read_in_order() {
+        let (mut slot, _) = InputSlot::create(None);
+        let (mut producer, consumer) = input_queue();
+        slot.set_input(Some(consumer));
+        slot.prepare(256);
+
+        let mut out = vec![0.0; INPUT_QUEUE_SIZE - 10];
+        for _ in 0..out.len() {
+            producer.push(0.0).unwrap();
+        }
+        slot.process(&mut out);
+
+        for i in 0..20 {
+            producer.push(i as f32).unwrap();
+        }
+        let mut out = [0.0; 20];
+        slot.process(&mut out);
+
+        let expected: [f32; 20] = std::array::from_fn(|i| i as f32);
+        assert_eq!(out, expected);
     }
 
     #[test]
@@ -245,7 +282,7 @@ mod tests {
         let (mut slot, _) = InputSlot::create(None);
         slot.prepare(256);
 
-        assert_eq!(slot.next_sample(), 0.0);
+        assert_eq!(read(&mut slot, 1), [0.0]);
         slot.prepare(256);
         assert_eq!(slot.params.underruns.load(Ordering::Relaxed), 0);
     }

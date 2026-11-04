@@ -6,7 +6,10 @@ use std::{
     },
 };
 
-use crate::{atomic::AtomicF32, audio::transport::Transport};
+use crate::{
+    atomic::AtomicF32,
+    audio::{frame::Frame, transport::Transport},
+};
 
 pub const BEATS_PER_BAR: u64 = 4;
 pub const DEFAULT_VOLUME: f32 = 0.3;
@@ -62,28 +65,30 @@ impl Metronome {
         self.volume = self.params.volume.get();
     }
 
-    /// The click's sample for the transport's current position. Call it
-    /// before the transport advances, so a beat's first sample isn't missed.
-    pub fn next_sample(&mut self, transport: &Transport) -> f32 {
+    /// Adds the clicks into `out`, a block that starts at sample `start` of
+    /// the transport.
+    pub fn add_to(&mut self, out: &mut [Frame], transport: &Transport, start: u64) {
         if !self.enabled {
-            return 0.0;
+            return;
         }
 
-        if let Some(beat) = transport.beat_starting_now() {
-            self.phase = 0.0;
-            self.amplitude = 1.0;
-            self.frequency = if beat % BEATS_PER_BAR == 0 {
-                DOWNBEAT_FREQUENCY
-            } else {
-                BEAT_FREQUENCY
-            };
+        for (position, frame) in (start..).zip(out) {
+            if let Some(beat) = transport.beat_starting_at(position) {
+                self.phase = 0.0;
+                self.amplitude = 1.0;
+                self.frequency = if beat % BEATS_PER_BAR == 0 {
+                    DOWNBEAT_FREQUENCY
+                } else {
+                    BEAT_FREQUENCY
+                };
+            }
+
+            let sample = self.phase.sin() * self.amplitude * self.volume;
+            frame.left += sample;
+            frame.right += sample;
+
+            self.phase = (self.phase + TAU * self.frequency / self.sample_rate) % TAU;
+            self.amplitude *= self.decay;
         }
-
-        let sample = self.phase.sin() * self.amplitude * self.volume;
-
-        self.phase = (self.phase + TAU * self.frequency / self.sample_rate) % TAU;
-        self.amplitude *= self.decay;
-
-        sample
     }
 }
