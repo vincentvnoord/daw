@@ -45,7 +45,7 @@ impl<I: Instrument> AudioSource for InstrumentSource<I> {
         self.instrument.begin_buffer();
     }
 
-    fn next_sample(&mut self) -> f32 {
-        self.instrument.next_sample()
+    fn process(&mut self, out: &mut [f32]) {
+        self.instrument.process(out);
     }
 }

@@ -127,19 +127,19 @@ impl Transport {
         (beat * 60.0 / self.bpm * self.sample_rate).ceil() as u64
     }
 
-    /// The index of the beat that starts at the current sample, if one does.
+    /// The index of the beat that starts at sample `position`, if one does.
     /// Stopped, the position doesn't move, so no beat starts.
-    pub fn beat_starting_now(&self) -> Option<u64> {
+    pub fn beat_starting_at(&self, position: u64) -> Option<u64> {
         if !self.playing {
             return None;
         }
 
-        let beat = self.position_in_beats().floor() as u64;
-        if self.position == 0 {
+        let beat = beats_at(position, self.bpm, self.sample_rate).floor() as u64;
+        if position == 0 {
             return Some(beat);
         }
 
-        let previous = beats_at(self.position - 1, self.bpm, self.sample_rate).floor() as u64;
+        let previous = beats_at(position - 1, self.bpm, self.sample_rate).floor() as u64;
         (beat != previous).then_some(beat)
     }
 }
@@ -167,6 +167,10 @@ mod tests {
         transport
     }
 
+    fn beat_at(bpm: f32, position: u64) -> Option<u64> {
+        transport_at(bpm, position).beat_starting_at(position)
+    }
+
     #[test]
     fn one_beat_at_120_bpm() {
         assert_eq!(transport_at(120.0, 24000).position_in_beats(), 1.0);
@@ -183,10 +187,15 @@ mod tests {
 
     #[test]
     fn beat_starts_on_its_first_sample() {
-        assert_eq!(transport_at(120.0, 0).beat_starting_now(), Some(0));
-        assert_eq!(transport_at(120.0, 23999).beat_starting_now(), None);
-        assert_eq!(transport_at(120.0, 24000).beat_starting_now(), Some(1));
-        assert_eq!(transport_at(120.0, 24001).beat_starting_now(), None);
+        assert_eq!(beat_at(120.0, 0), Some(0));
+        assert_eq!(beat_at(120.0, 23999), None);
+        assert_eq!(beat_at(120.0, 24000), Some(1));
+        assert_eq!(beat_at(120.0, 24001), None);
+    }
+
+    #[test]
+    fn beat_starting_at_finds_a_beat_ahead_of_the_playhead() {
+        assert_eq!(transport_at(120.0, 0).beat_starting_at(24000), Some(1));
     }
 
     #[test]
@@ -195,15 +204,15 @@ mod tests {
         transport.params.playing.store(false, Ordering::Relaxed);
         transport.begin_buffer();
 
-        assert_eq!(transport.beat_starting_now(), None);
+        assert_eq!(transport.beat_starting_at(transport.position()), None);
     }
 
     #[test]
     fn beat_between_samples_starts_on_the_sample_after() {
         // at 130 bpm a beat is 22153.8 samples long
-        assert_eq!(transport_at(130.0, 22153).beat_starting_now(), None);
-        assert_eq!(transport_at(130.0, 22154).beat_starting_now(), Some(1));
-        assert_eq!(transport_at(130.0, 22155).beat_starting_now(), None);
+        assert_eq!(beat_at(130.0, 22153), None);
+        assert_eq!(beat_at(130.0, 22154), Some(1));
+        assert_eq!(beat_at(130.0, 22155), None);
     }
 
     #[test]

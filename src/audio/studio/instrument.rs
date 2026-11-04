@@ -54,3 +54,48 @@ impl InstrumentSlot {
         }
     }
 }
+
+#[cfg(test)]
+pub mod recorder {
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+    use crate::audio::source::AudioSource;
+
+    /// What a `Recorder` wrote down: each note it got, with how many frames
+    /// it had rendered when the note came in.
+    pub type Notes = Arc<Mutex<Vec<(usize, NoteEvent)>>>;
+
+    /// An instrument for tests that makes no sound and writes down its notes.
+    pub struct Recorder {
+        rendered: usize,
+        notes: Notes,
+    }
+
+    impl Recorder {
+        /// A slot holding a recorder, routed nowhere, and what it writes down.
+        pub fn slot() -> (InstrumentSlot, Notes) {
+            let notes = Notes::default();
+            let recorder = Self {
+                rendered: 0,
+                notes: Arc::clone(&notes),
+            };
+            let params = Arc::new(InstrumentParams::new(None));
+
+            (InstrumentSlot::new(params, Box::new(recorder)), notes)
+        }
+    }
+
+    impl AudioSource for Recorder {
+        fn process(&mut self, out: &mut [f32]) {
+            out.fill(0.0);
+            self.rendered += out.len();
+        }
+    }
+
+    impl NoteSource for Recorder {
+        fn note(&mut self, event: NoteEvent) {
+            self.notes.lock().unwrap().push((self.rendered, event));
+        }
+    }
+}

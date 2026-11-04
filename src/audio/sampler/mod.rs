@@ -61,8 +61,11 @@ impl Instrument for Sampler {
 }
 
 impl AudioSource for Sampler {
-    fn next_sample(&mut self) -> f32 {
-        self.voices.iter_mut().map(|v| v.next_sample()).sum()
+    fn process(&mut self, out: &mut [f32]) {
+        out.fill(0.0);
+        for voice in &mut self.voices {
+            voice.add_to(out);
+        }
     }
 }
 
@@ -95,23 +98,23 @@ impl SampleVoice {
     pub fn note(&self) -> u8 {
         self.note
     }
-}
 
-impl AudioSource for SampleVoice {
-    fn next_sample(&mut self) -> f32 {
-        if self.is_idle() {
-            return 0.0;
+    pub fn add_to(&mut self, out: &mut [f32]) {
+        for sample in out {
+            if self.is_idle() {
+                break;
+            }
+
+            let i = self.position as usize;
+            let frac = (self.position - i as f64) as f32;
+
+            let current = self.sample[i];
+            let next = self.sample.get(i + 1).copied().unwrap_or(0.0);
+            let value = current + (next - current) * frac;
+
+            self.position += 1.0;
+
+            *sample += value;
         }
-
-        let i = self.position as usize;
-        let frac = (self.position - i as f64) as f32;
-
-        let current = self.sample[i];
-        let next = self.sample.get(i + 1).copied().unwrap_or(0.0);
-        let out = current + (next - current) * frac;
-
-        self.position += 1.0;
-
-        out
     }
 }

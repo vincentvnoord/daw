@@ -42,15 +42,24 @@ impl Clips {
         }
     }
 
-    /// The clips' audio at sample `position` of the transport. Clips that
-    /// overlap add up.
-    pub fn sample_at(&self, position: u64) -> f32 {
-        self.starts
-            .iter()
-            .zip(&self.clips)
-            .filter(|&(&start, _)| position >= start)
-            .filter_map(|(&start, clip)| clip.samples.get((position - start) as usize))
-            .sum()
+    /// Adds the clips' audio from sample `position` of the transport into
+    /// `out`. Clips that overlap add up.
+    pub fn add_to(&self, out: &mut [f32], position: u64) {
+        let end = position + out.len() as u64;
+
+        for (&start, clip) in self.starts.iter().zip(&self.clips) {
+            let from = start.max(position);
+            let to = (start + clip.samples.len() as u64).min(end);
+            if from >= to {
+                continue;
+            }
+
+            let samples = &clip.samples[(from - start) as usize..(to - start) as usize];
+            let out = &mut out[(from - position) as usize..(to - position) as usize];
+            for (o, s) in out.iter_mut().zip(samples) {
+                *o += s;
+            }
+        }
     }
 }
 
@@ -84,14 +93,18 @@ mod tests {
         clips
     }
 
+    fn render(clips: &Clips, position: u64, frames: usize) -> Vec<f32> {
+        let mut out = vec![0.0; frames];
+        clips.add_to(&mut out, position);
+        out
+    }
+
     #[test]
     fn clip_starts_on_the_sample_its_beat_falls_on() {
         // at 120 bpm beat 1 is sample 24000
         let clips = prepared(vec![clip(1.0, 4)], 120.0);
 
-        assert_eq!(clips.sample_at(23999), 0.0);
-        assert_eq!(clips.sample_at(24000), 1.0);
-        assert_eq!(clips.sample_at(24001), 2.0);
+        assert_eq!(render(&clips, 23999, 3), [0.0, 1.0, 2.0]);
     }
 
     #[test]
@@ -99,23 +112,30 @@ mod tests {
         // at 130 bpm beat 1 is at sample 22153.8
         let clips = prepared(vec![clip(1.0, 4)], 130.0);
 
-        assert_eq!(clips.sample_at(22153), 0.0);
-        assert_eq!(clips.sample_at(22154), 1.0);
+        assert_eq!(render(&clips, 22153, 2), [0.0, 1.0]);
     }
 
     #[test]
     fn clip_is_silent_after_its_end() {
         let clips = prepared(vec![clip(0.0, 3)], 120.0);
 
-        assert_eq!(clips.sample_at(2), 3.0);
-        assert_eq!(clips.sample_at(3), 0.0);
+        assert_eq!(render(&clips, 2, 2), [3.0, 0.0]);
     }
 
     #[test]
     fn overlapping_clips_add_up() {
         let clips = prepared(vec![clip(0.0, 4), clip(0.0, 4)], 120.0);
 
-        assert_eq!(clips.sample_at(1), 4.0);
+        assert_eq!(render(&clips, 1, 1), [4.0]);
+    }
+
+    #[test]
+    fn clips_add_to_what_is_already_there() {
+        let clips = prepared(vec![clip(0.0, 2)], 120.0);
+        let mut out = [0.5, 0.5];
+        clips.add_to(&mut out, 0);
+
+        assert_eq!(out, [1.5, 2.5]);
     }
 
     #[test]
@@ -124,7 +144,6 @@ mod tests {
         // sample per sample
         let clips = prepared(vec![clip(1.0, 4)], 60.0);
 
-        assert_eq!(clips.sample_at(48000), 1.0);
-        assert_eq!(clips.sample_at(48003), 4.0);
+        assert_eq!(render(&clips, 48000, 4), [1.0, 2.0, 3.0, 4.0]);
     }
 }
