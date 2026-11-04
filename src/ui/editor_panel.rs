@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use eframe::egui::{self, Align, CornerRadius, Layout, Margin, RichText, Stroke};
 
 use crate::{
@@ -22,19 +20,22 @@ enum OutputChoice {
 
 /// The selected track as one panel: a header with the track's name, its type
 /// and the output channel, and its controls underneath: the instrument's for
-/// an instrument track, the input's for an audio track. `devices` is the
-/// list of recording devices offered for an audio track's input.
+/// an instrument track, the input's and clips' for an audio track. `devices`
+/// is the list of recording devices offered for an audio track's input.
+/// Returns `true` when asked to add a clip to the track; the file dialog is
+/// the app's to open, after drawing.
 pub fn show(
     ui: &mut egui::Ui,
     project: &mut Project,
     active: usize,
     devices: &mut Vec<InputDevice>,
-) {
+) -> bool {
     let Some(track) = project.tracks.get(active) else {
-        return;
+        return false;
     };
     let mut choice = None;
     let mut input = None;
+    let mut add_clip = false;
 
     egui::Frame::new()
         .fill(theme::PANEL)
@@ -51,7 +52,10 @@ pub fn show(
                 let layout = Layout::left_to_right(Align::Min).with_main_wrap(true);
                 ui.with_layout(layout, |ui| match &track.source {
                     TrackSource::Instrument(instrument) => instrument_controls(ui, instrument),
-                    TrackSource::Audio(audio) => input = audio_controls(ui, audio, devices),
+                    TrackSource::Audio(audio) => {
+                        input = audio_controls(ui, audio, devices);
+                        add_clip = clip_controls(ui, audio);
+                    }
                 });
             });
         });
@@ -76,6 +80,8 @@ pub fn show(
             eprintln!("failed to open {name}: {err}");
         }
     }
+
+    add_clip
 }
 
 fn header(ui: &mut egui::Ui, track: &Track, project: &Project, choice: &mut Option<OutputChoice>) {
@@ -140,7 +146,8 @@ fn instrument_controls(ui: &mut egui::Ui, instrument: &InstrumentHandle) {
     }
 }
 
-/// Which input the track listens to, whether it's heard, and its trim.
+/// Which input the track listens to, and its trim. Muting is on the track's
+/// header.
 /// Returns the input picked in the dropdown, if one was: an index in
 /// `devices`, or `None` for no input.
 fn audio_controls(
@@ -176,17 +183,6 @@ fn audio_controls(
         if combo.response.clicked() {
             *devices = input_devices();
         }
-
-        ui.add_space(theme::GAP);
-        let params = &audio.params;
-        let mut monitoring = params.enabled.load(Ordering::Relaxed);
-        if ui
-            .toggle_value(&mut monitoring, "Monitor")
-            .on_hover_text("Hear the input through the track's channel")
-            .changed()
-        {
-            params.enabled.store(monitoring, Ordering::Relaxed);
-        }
     });
 
     card(ui, "Level", |ui| {
@@ -196,4 +192,24 @@ fn audio_controls(
     });
 
     picked
+}
+
+/// How many clips the track has, and a button to add one at the playhead.
+/// Returns `true` when the button is clicked.
+fn clip_controls(ui: &mut egui::Ui, audio: &AudioHandle) -> bool {
+    let mut add = false;
+
+    card(ui, "Clips", |ui| {
+        let count = match audio.clips.len() {
+            1 => "1 clip".to_owned(),
+            n => format!("{n} clips"),
+        };
+        ui.label(RichText::new(count).font(theme::value_font()));
+        add = ui
+            .button("Add WAV…")
+            .on_hover_text("Place a WAV file at the playhead")
+            .clicked();
+    });
+
+    add
 }

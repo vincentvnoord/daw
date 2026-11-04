@@ -65,13 +65,24 @@ impl Project {
         self.update_schedule();
     }
 
-    /// Where the timeline ends: the end of the last placement on any track.
+    /// Where the timeline ends: the end of the last placement or clip on any
+    /// track.
     pub fn timeline_length(&self) -> f64 {
-        self.tracks
+        let bpm = self.transport.bpm.get() as f64;
+        let sample_rate = self.sample_rate as f64;
+        let placements = self
+            .tracks
             .iter()
             .flat_map(|t| &t.placements)
-            .filter_map(|p| Some(p.start + self.sequences.get(p.sequence)?.length))
-            .fold(0.0, f64::max)
+            .filter_map(|p| Some(p.start + self.sequences.get(p.sequence)?.length));
+        let clips = self
+            .tracks
+            .iter()
+            .filter_map(Track::audio)
+            .flat_map(|a| &a.clips)
+            .map(|c| c.start + c.length_in_beats(bpm, sample_rate));
+
+        placements.chain(clips).fold(0.0, f64::max)
     }
 
     /// Sends the timeline to the studio as its new schedule. Call after

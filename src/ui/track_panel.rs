@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use eframe::egui::{self, Popup, RichText, Sense};
+use eframe::egui::{self, Popup, Rect, RichText, Sense, UiBuilder, pos2};
 
 use crate::{
     audio::studio::MAX_INSTRUMENTS,
@@ -8,12 +8,19 @@ use crate::{
     ui::{
         theme,
         timeline::{RULER_HEIGHT, Timeline},
-        widgets::list::{add_card, list_card, menu_frame, menu_option, section_label},
+        widgets::{
+            icon_button::{Icon, IconButton},
+            list::{list_card, menu_frame, menu_option, section_label},
+        },
     },
 };
 
 /// Width of the column with the track headers, left of the lanes.
 const HEADER_WIDTH: f32 = 200.0;
+/// Gap between an audio track's mute button and the card's right edge.
+const MUTE_MARGIN: f32 = 8.0;
+/// Width the card's text gives up for the mute button.
+const MUTE_ROOM: f32 = IconButton::SIZE.x + MUTE_MARGIN;
 
 /// What the user did in the track list.
 pub enum TrackAction {
@@ -28,6 +35,15 @@ pub enum TrackAction {
         to: usize,
         start: f64,
     },
+    /// A clip was dropped somewhere new.
+    MoveClip {
+        from: usize,
+        index: usize,
+        /// The track it was dropped on, or `None` for the empty track at the
+        /// bottom, which becomes a new audio track.
+        to: Option<usize>,
+        start: f64,
+    },
     /// A placement was double-clicked: open its sequence in the piano roll.
     OpenSequence {
         track: usize,
@@ -38,8 +54,10 @@ pub enum TrackAction {
 /// The tracks with the timeline: a column of headers with the name, the
 /// instrument type and the channel each track plays into, and next to it the
 /// lanes with what each track plays. Clicking a header selects the track:
-/// the keyboard plays it and the editor shows its instrument. A last card
-/// with a + adds a track.
+/// the keyboard plays it and the editor shows its instrument. Below the last
+/// track is an empty one, which isn't in the project: clicking its header
+/// picks a source for it, and dropping a clip on its lane makes it an audio
+/// track.
 pub fn show(
     ui: &mut egui::Ui,
     project: &Project,
@@ -68,10 +86,13 @@ pub fn show(
                 }
             }
 
-            if project.tracks.len() < MAX_INSTRUMENTS
-                && let Some(added) = add_menu(ui)
-            {
-                action = Some(added);
+            // its height goes in too, so the timeline draws a lane next to it
+            if project.tracks.len() < MAX_INSTRUMENTS {
+                let (height, added) = empty_header(ui);
+                row_heights.push(height);
+                if let Some(added) = added {
+                    action = Some(added);
+                }
             }
         });
 
@@ -83,10 +104,16 @@ pub fn show(
     action
 }
 
-/// The + card under the headers, with its menu of track types.
-fn add_menu(ui: &mut egui::Ui) -> Option<TrackAction> {
+/// The empty track's header under the others, with its menu of sources.
+/// Returns its height and what was picked, if anything.
+fn empty_header(ui: &mut egui::Ui) -> (f32, Option<TrackAction>) {
     let mut action = None;
-    let add = add_card(ui, "add_track").on_hover_text("Add track");
+    let add = list_card(ui, "empty_track", false, |ui| {
+        ui.centered_and_justified(|ui| {
+            ui.label(RichText::new("+").size(20.0).color(theme::TEXT_DIM));
+        });
+    })
+    .on_hover_text("Add track, or drop a clip on its lane");
 
     Popup::menu(&add)
         .width(add.rect.width())
@@ -108,7 +135,7 @@ fn add_menu(ui: &mut egui::Ui) -> Option<TrackAction> {
             }
         });
 
-    action
+    (add.rect.height(), action)
 }
 
 fn header(
@@ -129,11 +156,11 @@ fn header(
     let (details, color) = match (track.audio(), track.kind_label()) {
         (Some(audio), _) => {
             let input = audio.input.as_ref().map_or("no input", |i| i.name.as_str());
-            let monitoring = audio.params.enabled.load(Ordering::Relaxed);
-            let color = if monitoring {
-                theme::TEXT
-            } else {
+            let muted = audio.params.muted.load(Ordering::Relaxed);
+            let color = if muted || audio.input.is_none() {
                 theme::TEXT_DIM
+            } else {
+                theme::TEXT
             };
             (format!("{input} → {output}"), color)
         }
@@ -141,7 +168,11 @@ fn header(
         (None, None) => (format!("→ {output}"), theme::TEXT_DIM),
     };
 
-    list_card(ui, ("track", index), selected, |ui| {
+    let card = list_card(ui, ("track", index), selected, |ui| {
+        if track.audio().is_some() {
+            // leave room on the right for the mute button
+            ui.set_max_width(ui.available_width() - MUTE_ROOM);
+        }
         ui.label(RichText::new(&track.name).strong());
         ui.add(
             egui::Label::new(
@@ -151,5 +182,31 @@ fn header(
             )
             .truncate(),
         );
-    })
+    });
+
+    // placed over the card after it, so a click on the button mutes
+    // instead of selecting the track. drawn in a child ui: `ui.put` would
+    // move the cursor up to the button and the next card would overlap
+    if let Some(audio) = track.audio() {
+        let muted = audio.params.muted.load(Ordering::Relaxed);
+        let size = IconButton::SIZE;
+        let rect = Rect::from_min_size(
+            pos2(
+                card.rect.right() - MUTE_MARGIN - size.x,
+                card.rect.center().y - size.y / 2.0,
+            ),
+            size,
+        );
+        let hover = if muted { "Unmute" } else { "Mute" };
+        if ui
+            .new_child(UiBuilder::new().max_rect(rect))
+            .add(IconButton::new(Icon::Speaker).selected(muted))
+            .on_hover_text(hover)
+            .clicked()
+        {
+            audio.params.muted.fetch_xor(true, Ordering::Relaxed);
+        }
+    }
+
+    card
 }

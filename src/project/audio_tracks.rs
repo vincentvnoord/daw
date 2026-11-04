@@ -10,16 +10,18 @@ use crate::{
             input::{InputParams, InputSlot, input_queue},
         },
     },
-    project::{Project, Track, TrackSource},
+    project::{Clip, Project, Track, TrackSource},
 };
 
-/// The UI's side of an audio track in the studio: its input slot, and the
-/// recording device it monitors, if one is chosen.
+/// The UI's side of an audio track in the studio: its input slot, the
+/// recording device it monitors, if one is chosen, and its clips.
 pub struct AudioHandle {
     /// Index of the track's input slot in the studio.
     pub slot: usize,
     pub params: Arc<InputParams>,
     pub input: Option<LiveInput>,
+    /// In no particular order, like placements.
+    pub clips: Vec<Clip>,
 }
 
 /// A recording device an audio track is listening to.
@@ -87,9 +89,9 @@ pub fn input_devices() -> Vec<InputDevice> {
 
 impl Project {
     /// Adds an audio track with no input yet, playing into a new channel
-    /// named after it. Monitoring starts off, so a mic doesn't feed back
-    /// through the speakers the moment it's chosen. Returns its index in
-    /// `tracks`, or `None` when the studio is full.
+    /// named after it. Its input is heard as soon as one is chosen, until the
+    /// track is muted. Returns its index in `tracks`, or `None` when the
+    /// studio is full.
     pub fn add_audio_track(&mut self) -> Option<usize> {
         let slot = self.tracks.iter().filter(|t| t.audio().is_some()).count();
         // room for both the channel and the slot, so we never end up with
@@ -112,6 +114,7 @@ impl Project {
                 slot,
                 params,
                 input: None,
+                clips: Vec::new(),
             }),
             placements: Vec::new(),
         });

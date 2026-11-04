@@ -25,7 +25,7 @@ pub struct Track {
 pub enum TrackSource {
     /// An instrument of its own, playing the sequences placed on the track.
     Instrument(InstrumentHandle),
-    /// A live input it monitors (and, later, the audio recorded from it).
+    /// A live input it monitors, and the clips of audio it plays.
     Audio(AudioHandle),
 }
 
