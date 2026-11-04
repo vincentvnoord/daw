@@ -122,8 +122,8 @@ mod tests {
             schedule.next_beat().filter(|&b| b <= beat)?;
             schedule.take_next()
         })
-            .map(|(_, event)| format!("{event:?}"))
-            .collect()
+        .map(|(_, event)| format!("{event:?}"))
+        .collect()
     }
 
     #[test]

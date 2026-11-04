@@ -36,7 +36,7 @@ The audio thread never allocates, frees, locks or blocks. In practice:
 
 ## Timeline
 
-Design and build order agreed so far: tracks own one instrument each and send to a channel (many tracks can share one); sequences hold notes in beats and are placed on tracks; the UI flattens the tree into a sorted schedule the studio plays against the `Transport`. Scheduled notes must start on their exact sample, as the metronome's clicks do.
+Design and build order agreed so far: tracks own one instrument each and send to a channel (many tracks can share one); sequences hold notes in beats and are placed on tracks; the UI flattens the tree into a sorted `Schedule`, which the studio's `Sequencer` plays along the `Transport` it owns. Scheduled notes must start on their exact sample, as the metronome's clicks do.
 
 ## Style
 
