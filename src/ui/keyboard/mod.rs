@@ -83,7 +83,11 @@ impl Keyboard {
 
 /// Sends a note to `track`'s instrument, if it has one.
 fn send(project: &mut Project, track: usize, event: NoteEvent) {
-    if let Some(instrument) = project.tracks.get_mut(track).and_then(Track::instrument_mut) {
+    if let Some(instrument) = project
+        .tracks
+        .get_mut(track)
+        .and_then(Track::instrument_mut)
+    {
         let _ = instrument.notes.push(event);
     }
 }

@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
-use crate::atomic::AtomicF32;
+use crate::atomic::{AtomicF32, AtomicF64};
 
 pub mod metronome;
 
@@ -18,8 +18,10 @@ pub struct TransportParams {
     /// Where the playhead is, in samples. Only the audio thread writes it,
     /// once per buffer.
     pub position: AtomicU64,
-    /// Set by the UI to send the playhead back to the start.
-    pub rewind: AtomicBool,
+    /// The beat the UI wants the playhead moved to, or NaN with no seek
+    /// waiting. The UI sets it with `seek`; the audio thread takes it with
+    /// `take_seek` once per buffer, so every request is seen exactly once.
+    pub pending_seek: AtomicF64,
 }
 
 impl TransportParams {
@@ -28,12 +30,25 @@ impl TransportParams {
             playing: AtomicBool::new(false),
             bpm: AtomicF32::new(DEFAULT_BPM),
             position: AtomicU64::new(0),
-            rewind: AtomicBool::new(false),
+            pending_seek: AtomicF64::new(f64::NAN),
         }
     }
 
     pub fn toggle_playing(&self) {
         self.playing.fetch_xor(true, Ordering::Relaxed);
+    }
+
+    /// Asks for the playhead to move to `beat` from the next buffer, playing
+    /// or not. A second seek before then replaces the first.
+    pub fn seek(&self, beat: f64) {
+        self.pending_seek.set(beat.max(0.0));
+    }
+
+    /// The beat asked for since the last call, if any, clearing the request
+    /// in the same step so a seek arriving meanwhile can't be lost.
+    pub fn take_seek(&self) -> Option<f64> {
+        let value = self.pending_seek.swap(f64::NAN);
+        if value.is_nan() { None } else { Some(value) }
     }
 }
 
@@ -66,17 +81,28 @@ impl Transport {
 
     /// Picks up what the UI changed and tells it where the playhead is.
     pub fn begin_buffer(&mut self) {
-        self.jumped = self.params.rewind.swap(false, Ordering::Relaxed);
-        if self.jumped {
-            self.position = 0;
-        }
-
         let was_playing = self.playing;
         self.playing = self.params.playing.load(Ordering::Relaxed);
         self.stopped = was_playing && !self.playing;
         self.set_bpm(self.params.bpm.get() as f64);
 
+        self.seek();
+
         self.params.position.store(self.position, Ordering::Relaxed);
+    }
+
+    /// Moves the playhead to a beat the UI asked for, as a jump. After
+    /// `set_bpm`, so the beat is turned into samples at this buffer's tempo.
+    fn seek(&mut self) {
+        match self.params.take_seek() {
+            Some(beat) => {
+                self.position = self.sample_at(beat);
+                self.jumped = true;
+            }
+            None => {
+                self.jumped = false;
+            }
+        }
     }
 
     /// Changes the tempo without moving the playhead to another beat: the
@@ -225,26 +251,87 @@ mod tests {
     }
 
     #[test]
-    fn rewind_goes_back_to_the_start() {
+    fn seeking_moves_the_playhead_to_the_beat() {
         let mut transport = transport_at(120.0, 36000);
-        transport.params.rewind.store(true, Ordering::Relaxed);
+        transport.params.seek(4.0);
         transport.begin_buffer();
 
-        assert_eq!(transport.position_in_beats(), 0.0);
-        assert!(!transport.params.rewind.load(Ordering::Relaxed));
+        assert_eq!(transport.position_in_beats(), 4.0);
     }
 
     #[test]
-    fn rewind_counts_as_a_jump_for_one_buffer() {
+    fn seeking_to_zero_goes_back_to_the_start() {
+        let mut transport = transport_at(120.0, 36000);
+        transport.params.seek(0.0);
+        transport.begin_buffer();
+
+        assert_eq!(transport.position(), 0);
+    }
+
+    #[test]
+    fn a_seek_is_taken_once() {
+        let transport = transport_at(120.0, 0);
+        transport.params.seek(2.0);
+
+        assert_eq!(transport.params.take_seek(), Some(2.0));
+        assert_eq!(transport.params.take_seek(), None);
+    }
+
+    #[test]
+    fn a_seek_counts_as_a_jump_for_one_buffer() {
         let mut transport = transport_at(120.0, 36000);
         assert!(!transport.jumped());
 
-        transport.params.rewind.store(true, Ordering::Relaxed);
+        transport.params.seek(1.0);
         transport.begin_buffer();
         assert!(transport.jumped());
 
         transport.begin_buffer();
         assert!(!transport.jumped());
+    }
+
+    #[test]
+    fn seeking_the_same_beat_twice_jumps_twice() {
+        let mut transport = transport_at(120.0, 0);
+        transport.params.seek(1.0);
+        transport.begin_buffer();
+        transport.advance(1000);
+
+        transport.params.seek(1.0);
+        transport.begin_buffer();
+
+        assert!(transport.jumped());
+        assert_eq!(transport.position_in_beats(), 1.0);
+    }
+
+    #[test]
+    fn a_seek_with_a_tempo_change_lands_on_its_beat() {
+        let mut transport = transport_at(120.0, 36000);
+        transport.params.bpm.set(60.0);
+        transport.params.seek(1.0);
+        transport.begin_buffer();
+
+        // at 60 bpm beat 1 is a second in
+        assert_eq!(transport.position(), 48000);
+    }
+
+    #[test]
+    fn a_seek_while_stopped_stays_put() {
+        let mut transport = Transport::new(params(120.0, false), 48000.0);
+        transport.params.seek(2.0);
+        transport.begin_buffer();
+        transport.advance(1000);
+
+        assert_eq!(transport.position_in_beats(), 2.0);
+    }
+
+    #[test]
+    fn a_seek_before_the_start_goes_to_the_start() {
+        let mut transport = transport_at(120.0, 36000);
+        transport.params.seek(-0.5);
+        transport.begin_buffer();
+
+        assert_eq!(transport.position(), 0);
     }
 
     #[test]

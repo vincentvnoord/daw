@@ -59,10 +59,18 @@ impl Timeline {
             .id_salt("timeline")
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    let (ruler_rect, _) =
-                        ui.allocate_exact_size(vec2(width, RULER_HEIGHT), Sense::hover());
+                    let (ruler_rect, ruler_response) =
+                        ui.allocate_exact_size(vec2(width, RULER_HEIGHT), Sense::click());
+
                     let grid = Grid::new(ruler_rect.left(), ui.clip_rect(), samples_per_beat);
                     ruler(ui.painter(), &grid, ruler_rect);
+
+                    if ruler_response.clicked()
+                        && let Some(pos) = ruler_response.interact_pointer_pos()
+                    {
+                        let beat = grid.beat(pos.x);
+                        project.transport.seek(beat);
+                    }
 
                     let lanes: Vec<Rect> = row_heights
                         .iter()

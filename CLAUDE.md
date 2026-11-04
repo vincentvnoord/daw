@@ -18,7 +18,7 @@ The threads talk in exactly four ways. A new feature picks one of these:
 
 | Path | Direction | For |
 | --- | --- | --- |
-| `Arc<…Params>` with atomics (`atomic::AtomicF32`) | both | continuous values: gain, pan, bpm, playhead. Read once per buffer in `begin_buffer`. |
+| `Arc<…Params>` with atomics (`atomic::AtomicF32`, `AtomicF64`) | both | continuous values (gain, pan, bpm, playhead) and transport requests (play, seek: a value the audio thread takes with `swap`). Read once per buffer in `begin_buffer`. |
 | `StudioCommand` queue | UI → audio | structural changes: add/remove channels, instruments, inputs |
 | `Garbage` queue | audio → UI | anything the studio drops, freed on the UI thread |
 | per-instrument `NoteEvent` ring buffer | UI → audio | live keyboard notes |
