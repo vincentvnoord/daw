@@ -12,7 +12,7 @@ Two threads, and the `project` / `audio` split follows them:
 
 - `src/project/` is the UI thread's side: `Project` owns the tracks (instrument or audio), sequences and channels as handles, and every change to the studio goes through a method on it.
 - `src/audio/` is the audio thread's side: `Studio` (in `audio/studio/`) is the one `StereoSource` the engine plays. `audio` never imports from `project` or `ui`.
-- `src/ui/` draws the `Project`; panels in `ui/`, reusable controls in `ui/widgets/`.
+- `src/ui/` draws the `Project`. Each component is a module (`tracks/`, `piano_roll/`, `editor/`, `keyboard/`, …), split into submodules once it grows; a component reports what the user did as an action, like `TrackAction`, and `app/actions.rs` carries it out after drawing. Reusable controls live in `ui/widgets/`.
 
 The threads talk in exactly four ways. A new feature picks one of these:
 
