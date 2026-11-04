@@ -1,11 +1,9 @@
 pub mod app;
-mod editor_panel;
+mod editor;
 mod keyboard;
-mod mixer_panel;
+mod mixer;
 mod piano_roll;
-mod synth_panel;
 pub mod theme;
-mod timeline;
-mod track_panel;
-mod transport_panel;
+mod tracks;
+mod transport;
 mod widgets;

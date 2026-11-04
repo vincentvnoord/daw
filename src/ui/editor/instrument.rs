@@ -1,14 +1,32 @@
-use eframe::egui;
+//! The controls for an instrument track: the synth's knobs, or the sample a
+//! sampler plays.
+
+use eframe::egui::{self, RichText};
 
 use crate::{
     audio::synth::SynthParams,
-    ui::widgets::{
-        card::card, envelope_view::EnvelopeView, knob::Knob, value::Unit,
-        waveform_picker::WaveformPicker,
+    project::{InstrumentHandle, InstrumentKind},
+    ui::{
+        theme,
+        widgets::{
+            card::card, envelope_view::EnvelopeView, knob::Knob, value::Unit,
+            waveform_picker::WaveformPicker,
+        },
     },
 };
 
-pub fn show(ui: &mut egui::Ui, params: &SynthParams) {
+pub(super) fn instrument_controls(ui: &mut egui::Ui, instrument: &InstrumentHandle) {
+    match &instrument.kind {
+        InstrumentKind::Synth(params) => synth_controls(ui, params),
+        InstrumentKind::Sampler { sample } => {
+            card(ui, "Sample", |ui| {
+                ui.label(RichText::new(sample).font(theme::value_font()));
+            });
+        }
+    }
+}
+
+fn synth_controls(ui: &mut egui::Ui, params: &SynthParams) {
     card(ui, "Oscillator", |ui| {
         ui.add(WaveformPicker::new(&params.waveform));
     });

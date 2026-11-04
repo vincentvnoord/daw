@@ -25,7 +25,7 @@ pub fn show(ui: &mut egui::Ui, project: &Project) {
         .on_hover_text("Back to start")
         .clicked()
     {
-        transport.rewind.store(true, Ordering::Relaxed);
+        transport.seek(0.0);
     }
 
     let playing = transport.playing.load(Ordering::Relaxed);
