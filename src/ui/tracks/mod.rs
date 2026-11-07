@@ -3,13 +3,17 @@ pub mod timeline;
 
 use eframe::egui::{self, Sense};
 
+/// Height of the bar numbers above the lanes. The track headers start this
+/// far down too, so each header lines up with its lane.
+pub const RULER_HEIGHT: f32 = 16.0;
+
 use crate::{
     audio::studio::MAX_INSTRUMENTS,
     project::Project,
     ui::{
         tracks::{
             header::{empty_header, header},
-            timeline::{RULER_HEIGHT, Timeline},
+            timeline::Timeline,
         },
         widgets::list::section_label,
     },
