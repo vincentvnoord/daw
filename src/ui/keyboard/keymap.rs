@@ -1,11 +1,6 @@
-use std::ops::RangeInclusive;
-
 use eframe::egui::{self, Key};
 
 use crate::audio::note::NoteEvent;
-
-/// Notes reachable from the computer keyboard.
-pub const NOTE_RANGE: RangeInclusive<u8> = 48..=76;
 
 const KEYMAP: [(Key, u8); 29] = [
     // lower octave: bottom row = white keys, home row = black keys
@@ -64,8 +59,4 @@ pub fn key_to_note_event(event: &egui::Event) -> Option<NoteEvent> {
 
 pub fn key_to_note(key: Key) -> Option<u8> {
     KEYMAP.iter().find(|(k, _)| *k == key).map(|(_, n)| *n)
-}
-
-pub fn note_to_key(note: u8) -> Option<Key> {
-    KEYMAP.iter().find(|(_, n)| *n == note).map(|(k, _)| *k)
 }

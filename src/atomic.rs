@@ -27,6 +27,10 @@ impl AtomicF64 {
         self.0.store(value.to_bits(), Ordering::Relaxed);
     }
 
+    pub fn get(&self) -> f64 {
+        f64::from_bits(self.0.load(Ordering::Relaxed))
+    }
+
     /// Stores `value` and returns what was there before, in one step, so
     /// nothing another thread stores in between can be lost.
     pub fn swap(&self, value: f64) -> f64 {

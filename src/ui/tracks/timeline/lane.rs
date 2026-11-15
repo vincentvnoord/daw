@@ -26,6 +26,7 @@ pub(super) fn ruler(painter: &Painter, grid: &Grid, rect: Rect) {
     }
 }
 
+///
 /// One track's row with the beat grid, stronger on every bar. The `empty`
 /// track's row has no fill, so it reads as space to drop into.
 pub(super) fn lane(painter: &Painter, grid: &Grid, rect: Rect, empty: bool) {
@@ -57,4 +58,17 @@ pub(super) fn playhead(painter: &Painter, grid: &Grid, rect: Rect, project: &Pro
     let x = grid.x(beats_at(samples, bpm, project.sample_rate as f64));
 
     painter.vline(x, rect.y_range(), Stroke::new(1.5, theme::ACCENT));
+}
+
+pub(super) fn loop_area(painter: &Painter, grid: &Grid, bounds: Rect, project: &Project) {
+    let (start, end) = project.transport.loop_area.get();
+    if start.is_nan() || end <= start {
+        return;
+    }
+
+    let x = grid.x(start)..=grid.x(end);
+
+    let loop_rect = Rect::from_x_y_ranges(x, bounds.y_range());
+
+    painter.rect_filled(loop_rect, 0.0, theme::ACCENT.gamma_multiply(0.15));
 }

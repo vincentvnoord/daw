@@ -9,6 +9,7 @@ mod block;
 mod drag;
 mod grid;
 mod lane;
+mod ruler;
 
 use eframe::egui::{self, CursorIcon, Rect, Sense, vec2};
 
@@ -21,19 +22,17 @@ use crate::{
             block::{Content, Kind, Look, block_rect, draw_block, gather},
             drag::Drag,
             grid::{Grid, PIXELS_PER_BEAT},
-            lane::{lane, playhead, ruler},
+            lane::{lane, loop_area, playhead, ruler},
+            ruler::Ruler,
         },
     },
 };
-
-/// Height of the bar numbers above the lanes. The track headers start this
-/// far down too, so each header lines up with its lane.
-pub const RULER_HEIGHT: f32 = 16.0;
 
 /// UI-side state of the timeline: the block being dragged, if any.
 #[derive(Default)]
 pub struct Timeline {
     drag: Option<Drag>,
+    ruler: Ruler,
 }
 
 impl Timeline {
@@ -59,18 +58,9 @@ impl Timeline {
             .id_salt("timeline")
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    let (ruler_rect, ruler_response) =
-                        ui.allocate_exact_size(vec2(width, RULER_HEIGHT), Sense::click());
+                    let grid = Grid::new(ui.cursor().left(), ui.clip_rect(), samples_per_beat);
 
-                    let grid = Grid::new(ruler_rect.left(), ui.clip_rect(), samples_per_beat);
-                    ruler(ui.painter(), &grid, ruler_rect);
-
-                    if ruler_response.clicked()
-                        && let Some(pos) = ruler_response.interact_pointer_pos()
-                    {
-                        let beat = grid.beat(pos.x);
-                        project.transport.seek(beat);
-                    }
+                    let ruler = self.ruler.show(ui, project, &grid, width);
 
                     let lanes: Vec<Rect> = row_heights
                         .iter()
@@ -86,8 +76,9 @@ impl Timeline {
 
                     action = self.blocks(ui, project, &grid, &lanes);
 
-                    let all = lanes.iter().fold(ruler_rect, |all, lane| all.union(*lane));
+                    let all = lanes.iter().fold(ruler, |all, lane| all.union(*lane));
                     playhead(ui.painter(), &grid, all, project);
+                    loop_area(ui.painter(), &grid, all, project);
                 });
             });
 
