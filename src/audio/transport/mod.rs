@@ -22,6 +22,8 @@ pub struct TransportParams {
     /// waiting. The UI sets it with `seek`; the audio thread takes it with
     /// `take_seek` once per buffer, so every request is seen exactly once.
     pub pending_seek: AtomicF64,
+    pub loop_start: AtomicF64,
+    pub loop_end: AtomicF64,
 }
 
 impl TransportParams {
@@ -31,6 +33,8 @@ impl TransportParams {
             bpm: AtomicF32::new(DEFAULT_BPM),
             position: AtomicU64::new(0),
             pending_seek: AtomicF64::new(f64::NAN),
+            loop_start: AtomicF64::new(0.0),
+            loop_end: AtomicF64::new(20.0),
         }
     }
 
@@ -42,6 +46,20 @@ impl TransportParams {
     /// or not. A second seek before then replaces the first.
     pub fn seek(&self, beat: f64) {
         self.pending_seek.set(beat.max(0.0));
+    }
+
+    pub fn set_loop_area(&self, start: f64, end: f64) {
+        if start > end {
+            self.loop_start.set(0.0);
+            self.loop_end.set(0.0);
+        }
+
+        self.loop_start.set(start);
+        self.loop_end.set(end);
+    }
+
+    pub fn get_loop_area(&self) -> (f64, f64) {
+        (self.loop_start.get(), self.loop_end.get())
     }
 
     /// The beat asked for since the last call, if any, clearing the request
@@ -56,13 +74,19 @@ impl TransportParams {
 pub struct Transport {
     params: Arc<TransportParams>,
     playing: bool,
-    position: u64, // position in samples
+
+    /// in samples
+    position: u64,
     bpm: f64,
     sample_rate: f64,
+
     /// Whether the playhead was moved this buffer, rather than played to.
     jumped: bool,
     /// Whether playing stopped this buffer.
     stopped: bool,
+
+    loop_start: u64,
+    loop_end: u64,
 }
 
 impl Transport {
@@ -76,6 +100,8 @@ impl Transport {
             sample_rate,
             jumped: false,
             stopped: false,
+            loop_start: 0,
+            loop_end: 0,
         }
     }
 
@@ -85,6 +111,7 @@ impl Transport {
         self.playing = self.params.playing.load(Ordering::Relaxed);
         self.stopped = was_playing && !self.playing;
         self.set_bpm(self.params.bpm.get() as f64);
+        self.set_loop_area_from_params();
 
         self.seek();
 
@@ -117,6 +144,11 @@ impl Transport {
         self.bpm = bpm;
     }
 
+    fn set_loop_area_from_params(&mut self) {
+        self.loop_start = self.sample_at(self.params.loop_start.get());
+        self.loop_end = self.sample_at(self.params.loop_end.get());
+    }
+
     pub fn is_playing(&self) -> bool {
         self.playing
     }
@@ -134,6 +166,11 @@ impl Transport {
 
     pub fn advance(&mut self, frames: u64) {
         if self.playing {
+            let new_sample = self.position + 1;
+            if new_sample > self.loop_end {
+                self.position = self.loop_start;
+            }
+
             self.position += frames;
         }
     }

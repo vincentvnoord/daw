@@ -129,7 +129,7 @@ impl StereoSource for Studio {
         // on the sample its beat falls on
         let mut done = 0;
         while done < frames {
-            let len = self.sequencer.step(frames - done, &mut self.instruments);
+            let segment = self.sequencer.step(frames - done, &mut self.instruments);
             self.render_instruments(done, done + len);
             done += len;
         }

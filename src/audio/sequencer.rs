@@ -4,6 +4,11 @@ use crate::audio::{
     note::NoteEvent, schedule::Schedule, studio::instrument::InstrumentSlot, transport::Transport,
 };
 
+pub struct Segment {
+    pub position: u64,
+    pub len: usize,
+}
+
 /// Plays the schedule along the transport, onto the studio's instruments.
 /// The transport lives here for as long as the studio does; the schedule is
 /// swapped out whenever the UI sends a new one.
@@ -52,18 +57,16 @@ impl Sequencer {
         std::mem::replace(&mut self.schedule, schedule)
     }
 
-    /// Plays the notes due at the playhead, then moves the playhead on to the
-    /// next note, or by `max` frames if that comes first. Returns how far it
-    /// moved: the frames to render before anything else is due.
-    ///
-    /// The playhead moves before those frames are rendered. That's fine for
-    /// instruments, which never look at the transport; whatever does reads
-    /// the position from before the first step.
-    pub fn step(&mut self, max: usize, instruments: &mut [InstrumentSlot]) -> usize {
+    pub fn step(&mut self, max: usize, instruments: &mut [InstrumentSlot]) -> Segment {
         self.play_due(instruments);
-        let frames = self.frames_to_next_note().map_or(max, |n| n.min(max));
-        self.transport.advance(frames as u64);
-        frames
+        let len = self.frames_to_next_note().map_or(max, |n| n.min(max));
+        let segment = Segment {
+            position: self.transport.position(),
+            len,
+        };
+
+        self.transport.advance(len as u64);
+        segment
     }
 
     fn play_due(&mut self, instruments: &mut [InstrumentSlot]) {

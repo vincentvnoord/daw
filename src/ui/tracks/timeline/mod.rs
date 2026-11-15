@@ -22,7 +22,7 @@ use crate::{
             block::{Content, Kind, Look, block_rect, draw_block, gather},
             drag::Drag,
             grid::{Grid, PIXELS_PER_BEAT},
-            lane::{lane, playhead, ruler},
+            lane::{lane, loop_area, playhead, ruler},
             ruler::Ruler,
         },
     },
@@ -78,6 +78,7 @@ impl Timeline {
 
                     let all = lanes.iter().fold(ruler, |all, lane| all.union(*lane));
                     playhead(ui.painter(), &grid, all, project);
+                    loop_area(ui.painter(), &grid, all, project);
                 });
             });
 

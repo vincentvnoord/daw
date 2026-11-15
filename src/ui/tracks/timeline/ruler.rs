@@ -8,15 +8,8 @@ use crate::{
     },
 };
 
-struct Selection {
-    start: f64,
-    end: f64,
-}
-
 #[derive(Default)]
-pub struct Ruler {
-    selection: Option<Selection>,
-}
+pub struct Ruler {}
 
 impl Ruler {
     pub fn show(&mut self, ui: &mut egui::Ui, project: &Project, grid: &Grid, width: f32) -> Rect {
