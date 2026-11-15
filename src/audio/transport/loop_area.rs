@@ -31,50 +31,44 @@ impl LoopAreaParams {
     }
 }
 
+#[derive(Clone, Copy)]
+struct Range {
+    start: u64,
+    end: u64,
+    start_beat: f64,
+}
+
 pub struct LoopArea {
     params: Arc<LoopAreaParams>,
-
-    /// Loop start in beats
-    loop_start_beat: f64,
-    /// Loop start in samples/frames
-    loop_start: u64,
-    /// Loop end in samples/frames
-    loop_end: u64,
+    range: Option<Range>,
 }
 
 impl LoopArea {
     pub fn new(params: Arc<LoopAreaParams>) -> Self {
         Self {
             params,
-            loop_start: 0,
-            loop_end: 0,
-            loop_start_beat: 0.0,
+            range: None,
         }
     }
 
     pub fn begin_buffer(&mut self, bpm: f64, sample_rate: f64) {
-        self.loop_start_beat = self.params.loop_start.get();
-        self.loop_start = sample_at(bpm, sample_rate, self.loop_start_beat);
-        self.loop_end = sample_at(bpm, sample_rate, self.params.loop_end.get());
+        let (start_beat, end_beat) = self.params.get();
+        let start = sample_at(bpm, sample_rate, start_beat);
+        let end = sample_at(bpm, sample_rate, end_beat);
+        self.range = (end > start).then_some(Range {
+            start,
+            end,
+            start_beat,
+        });
     }
 
-    pub fn get_start(&self) -> u64 {
-        self.loop_start
+    pub fn wrap(&self, position: u64) -> Option<(u64, f64)> {
+        let range = self.range?;
+        (position >= range.end).then_some((range.start, range.start_beat))
     }
 
-    pub fn get_start_beat(&self) -> f64 {
-        self.loop_start_beat
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.loop_end > self.loop_start
-    }
-
-    pub fn is_after_end(&self, position: u64) -> bool {
-        position >= self.loop_end
-    }
-
-    pub fn frames_to_end(&self, position: u64) -> u64 {
-        self.loop_end - position
+    pub fn frames_left(&self, position: u64) -> Option<u64> {
+        let range = self.range?;
+        Some(range.end.saturating_sub(position))
     }
 }

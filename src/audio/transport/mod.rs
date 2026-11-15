@@ -5,10 +5,10 @@ use std::sync::{
 
 use crate::{
     atomic::{AtomicF32, AtomicF64},
-    audio::transport::looparea::{LoopArea, LoopAreaParams},
+    audio::transport::loop_area::{LoopArea, LoopAreaParams},
 };
 
-pub mod looparea;
+pub mod loop_area;
 pub mod metronome;
 
 /// Tempo a new project starts at.
@@ -137,13 +137,13 @@ impl Transport {
 
     /// If past loop-end it sets playhead position to start and returns the loop-start in beats
     pub fn wrap(&mut self) -> Option<f64> {
-        if self.should_wrap() {
-            self.position = self.loop_area.get_start();
-
-            return Some(self.loop_area.get_start_beat());
+        if !self.playing {
+            return None;
         }
 
-        None
+        let (position, beat) = self.loop_area.wrap(self.position)?;
+        self.position = position;
+        Some(beat)
     }
 
     /// Whether the playhead was moved this buffer (sent back to the start),
@@ -166,28 +166,12 @@ impl Transport {
         beats_at(self.position, self.bpm, self.sample_rate)
     }
 
-    fn is_looping(&self) -> bool {
-        self.is_playing() && self.loop_area.is_valid()
-    }
-
-    fn should_wrap(&self) -> bool {
-        if !self.is_looping() {
-            return false;
-        }
-
-        if !self.loop_area.is_after_end(self.position) {
-            return false;
-        }
-
-        true
-    }
-
     pub fn frames_to_loop_end(&self) -> Option<u64> {
-        if !self.is_looping() {
+        if !self.playing {
             return None;
         }
 
-        Some(self.loop_area.frames_to_end(self.position))
+        self.loop_area.frames_left(self.position)
     }
 
     /// Where the playhead is, in samples.
