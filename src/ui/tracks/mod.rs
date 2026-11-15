@@ -5,7 +5,7 @@ use eframe::egui::{self, Sense};
 
 /// Height of the bar numbers above the lanes. The track headers start this
 /// far down too, so each header lines up with its lane.
-pub const RULER_HEIGHT: f32 = 16.0;
+pub const RULER_HEIGHT: f32 = 26.0;
 
 use crate::{
     audio::studio::MAX_INSTRUMENTS,

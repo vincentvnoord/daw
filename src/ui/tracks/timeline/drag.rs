@@ -6,7 +6,7 @@ use crate::{
 };
 
 /// What a dragged block snaps to, in beats. Holding Alt turns it off.
-const SNAP: f64 = 1.0;
+pub(super) const SNAP: f64 = 1.0;
 
 /// A block on its way somewhere. It only moves in the project when it's
 /// dropped; until then the timeline draws where it would land.
