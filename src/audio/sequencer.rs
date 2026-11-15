@@ -58,8 +58,22 @@ impl Sequencer {
     }
 
     pub fn step(&mut self, max: usize, instruments: &mut [InstrumentSlot]) -> Segment {
+        if let Some(beat) = self.transport.wrap() {
+            self.release(instruments);
+            self.schedule.seek(beat);
+        }
+
         self.play_due(instruments);
-        let len = self.frames_to_next_note().map_or(max, |n| n.min(max));
+
+        let mut len = max;
+        if let Some(n) = self.frames_to_next_note() {
+            len = len.min(n);
+        }
+
+        if let Some(n) = self.transport.frames_to_loop_end() {
+            len = len.min(n as usize);
+        }
+
         let segment = Segment {
             position: self.transport.position(),
             len,
@@ -159,7 +173,8 @@ mod tests {
         }
 
         fn step(&mut self, max: usize) -> usize {
-            self.sequencer.step(max, &mut self.instruments)
+            let seg = self.sequencer.step(max, &mut self.instruments);
+            seg.len
         }
 
         /// Every note played so far, as `On(n)` / `Off(n)` labels.

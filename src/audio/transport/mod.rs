@@ -87,6 +87,7 @@ pub struct Transport {
 
     loop_start: u64,
     loop_end: u64,
+    loop_start_beat: f64,
 }
 
 impl Transport {
@@ -102,6 +103,7 @@ impl Transport {
             stopped: false,
             loop_start: 0,
             loop_end: 0,
+            loop_start_beat: 0.0,
         }
     }
 
@@ -145,12 +147,24 @@ impl Transport {
     }
 
     fn set_loop_area_from_params(&mut self) {
-        self.loop_start = self.sample_at(self.params.loop_start.get());
+        self.loop_start_beat = self.params.loop_start.get();
+        self.loop_start = self.sample_at(self.loop_start_beat);
         self.loop_end = self.sample_at(self.params.loop_end.get());
     }
 
     pub fn is_playing(&self) -> bool {
         self.playing
+    }
+
+    /// If past loop-end it sets playhead position to start and returns the loop-start in beats
+    pub fn wrap(&mut self) -> Option<f64> {
+        if self.should_wrap() {
+            self.position = self.loop_start;
+
+            return Some(self.loop_start_beat);
+        }
+
+        None
     }
 
     /// Whether the playhead was moved this buffer (sent back to the start),
@@ -166,17 +180,36 @@ impl Transport {
 
     pub fn advance(&mut self, frames: u64) {
         if self.playing {
-            let new_sample = self.position + 1;
-            if new_sample > self.loop_end {
-                self.position = self.loop_start;
-            }
-
             self.position += frames;
         }
     }
 
     pub fn position_in_beats(&self) -> f64 {
         beats_at(self.position, self.bpm, self.sample_rate)
+    }
+
+    fn has_loop(&self) -> bool {
+        self.is_playing() && self.loop_end > self.loop_start
+    }
+
+    fn should_wrap(&self) -> bool {
+        if !self.has_loop() {
+            return false;
+        }
+
+        if self.position < self.loop_end {
+            return false;
+        }
+
+        true
+    }
+
+    pub fn frames_to_loop_end(&self) -> Option<u64> {
+        if !self.has_loop() {
+            return None;
+        }
+
+        Some(self.loop_end - self.position)
     }
 
     /// Where the playhead is, in samples.

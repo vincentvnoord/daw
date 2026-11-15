@@ -82,16 +82,16 @@ impl Studio {
         }
     }
 
-    fn render_inputs(&mut self, frames: usize, start: u64) {
-        let scratch = &mut self.scratch[..frames];
+    fn render_inputs(&mut self, from: usize, to: usize, position: u64) {
+        let scratch = &mut self.scratch[..to - from];
         let playing = self.sequencer.transport().is_playing();
         for slot in &mut self.inputs {
             slot.process(scratch);
             if playing {
-                slot.add_clips(scratch, start);
+                slot.add_clips(scratch, position);
             }
             if let Some(ch) = slot.output {
-                self.mixer.add_input(ch, 0, scratch);
+                self.mixer.add_input(ch, from, scratch);
             }
         }
     }
@@ -122,7 +122,6 @@ impl StereoSource for Studio {
     }
 
     fn process(&mut self, out: &mut [Frame]) {
-        let start = self.sequencer.transport().position();
         let frames = out.len();
 
         // instruments render up to each scheduled note, so the note starts
@@ -130,16 +129,23 @@ impl StereoSource for Studio {
         let mut done = 0;
         while done < frames {
             let segment = self.sequencer.step(frames - done, &mut self.instruments);
-            self.render_instruments(done, done + len);
-            done += len;
+            let to = done + segment.len;
+
+            self.render_instruments(done, to);
+            self.render_inputs(done, to, segment.position);
+
+            self.metronome.render(
+                self.sequencer.transport(),
+                done,
+                segment.len,
+                segment.position,
+            );
+
+            done += segment.len;
         }
 
-        self.render_inputs(frames, start);
         self.mixer.process(out);
-
-        // the click skips the mixer, so it never ends up in the mix
-        self.metronome
-            .add_to(out, self.sequencer.transport(), start);
+        self.metronome.add_to(out);
     }
 }
 
