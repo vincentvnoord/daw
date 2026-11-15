@@ -84,14 +84,6 @@ impl eframe::App for App {
             .resizable(false)
             .show(ui, |ui| self.header(ui));
 
-        // bottom panels stack upwards: the piano at the very bottom, the mixer above it
-        egui::Panel::bottom("keyboard")
-            .frame(theme::panel_frame())
-            .resizable(false)
-            .show(ui, |ui| {
-                self.keyboard.show(ui, &mut self.project, self.active)
-            });
-
         egui::Panel::bottom("mixer")
             .frame(theme::panel_frame())
             .resizable(false)

@@ -61,7 +61,7 @@ pub(super) fn playhead(painter: &Painter, grid: &Grid, rect: Rect, project: &Pro
 }
 
 pub(super) fn loop_area(painter: &Painter, grid: &Grid, bounds: Rect, project: &Project) {
-    let (start, end) = project.transport.get_loop_area();
+    let (start, end) = project.transport.loop_area.get();
     if start.is_nan() || end <= start {
         return;
     }

@@ -3,8 +3,12 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
-use crate::atomic::{AtomicF32, AtomicF64};
+use crate::{
+    atomic::{AtomicF32, AtomicF64},
+    audio::transport::looparea::{LoopArea, LoopAreaParams},
+};
 
+pub mod looparea;
 pub mod metronome;
 
 /// Tempo a new project starts at.
@@ -22,8 +26,7 @@ pub struct TransportParams {
     /// waiting. The UI sets it with `seek`; the audio thread takes it with
     /// `take_seek` once per buffer, so every request is seen exactly once.
     pub pending_seek: AtomicF64,
-    pub loop_start: AtomicF64,
-    pub loop_end: AtomicF64,
+    pub loop_area: Arc<LoopAreaParams>,
 }
 
 impl TransportParams {
@@ -33,8 +36,7 @@ impl TransportParams {
             bpm: AtomicF32::new(DEFAULT_BPM),
             position: AtomicU64::new(0),
             pending_seek: AtomicF64::new(f64::NAN),
-            loop_start: AtomicF64::new(0.0),
-            loop_end: AtomicF64::new(20.0),
+            loop_area: Arc::new(LoopAreaParams::new()),
         }
     }
 
@@ -46,20 +48,6 @@ impl TransportParams {
     /// or not. A second seek before then replaces the first.
     pub fn seek(&self, beat: f64) {
         self.pending_seek.set(beat.max(0.0));
-    }
-
-    pub fn set_loop_area(&self, start: f64, end: f64) {
-        if start > end {
-            self.loop_start.set(0.0);
-            self.loop_end.set(0.0);
-        }
-
-        self.loop_start.set(start);
-        self.loop_end.set(end);
-    }
-
-    pub fn get_loop_area(&self) -> (f64, f64) {
-        (self.loop_start.get(), self.loop_end.get())
     }
 
     /// The beat asked for since the last call, if any, clearing the request
@@ -85,14 +73,13 @@ pub struct Transport {
     /// Whether playing stopped this buffer.
     stopped: bool,
 
-    loop_start: u64,
-    loop_end: u64,
-    loop_start_beat: f64,
+    loop_area: LoopArea,
 }
 
 impl Transport {
     pub fn new(params: Arc<TransportParams>, sample_rate: f64) -> Self {
         let bpm = params.bpm.get() as f64;
+        let loop_area = LoopArea::new(Arc::clone(&params.loop_area));
         Self {
             params,
             playing: false,
@@ -101,9 +88,7 @@ impl Transport {
             sample_rate,
             jumped: false,
             stopped: false,
-            loop_start: 0,
-            loop_end: 0,
-            loop_start_beat: 0.0,
+            loop_area,
         }
     }
 
@@ -113,7 +98,7 @@ impl Transport {
         self.playing = self.params.playing.load(Ordering::Relaxed);
         self.stopped = was_playing && !self.playing;
         self.set_bpm(self.params.bpm.get() as f64);
-        self.set_loop_area_from_params();
+        self.loop_area.begin_buffer(self.bpm, self.sample_rate);
 
         self.seek();
 
@@ -125,7 +110,7 @@ impl Transport {
     fn seek(&mut self) {
         match self.params.take_seek() {
             Some(beat) => {
-                self.position = self.sample_at(beat);
+                self.position = sample_at(self.bpm, self.sample_rate, beat);
                 self.jumped = true;
             }
             None => {
@@ -146,12 +131,6 @@ impl Transport {
         self.bpm = bpm;
     }
 
-    fn set_loop_area_from_params(&mut self) {
-        self.loop_start_beat = self.params.loop_start.get();
-        self.loop_start = self.sample_at(self.loop_start_beat);
-        self.loop_end = self.sample_at(self.params.loop_end.get());
-    }
-
     pub fn is_playing(&self) -> bool {
         self.playing
     }
@@ -159,21 +138,20 @@ impl Transport {
     /// If past loop-end it sets playhead position to start and returns the loop-start in beats
     pub fn wrap(&mut self) -> Option<f64> {
         if self.should_wrap() {
-            self.position = self.loop_start;
+            self.position = self.loop_area.get_start();
 
-            return Some(self.loop_start_beat);
+            return Some(self.loop_area.get_start_beat());
         }
 
         None
     }
 
     /// Whether the playhead was moved this buffer (sent back to the start),
-    /// so whatever plays along it has to find its place again.
     pub fn jumped(&self) -> bool {
         self.jumped
     }
 
-    /// Whether playing stopped this buffer, so held notes can be released.
+    /// Whether playing stopped this buffer
     pub fn stopped(&self) -> bool {
         self.stopped
     }
@@ -188,16 +166,16 @@ impl Transport {
         beats_at(self.position, self.bpm, self.sample_rate)
     }
 
-    fn has_loop(&self) -> bool {
-        self.is_playing() && self.loop_end > self.loop_start
+    fn is_looping(&self) -> bool {
+        self.is_playing() && self.loop_area.is_valid()
     }
 
     fn should_wrap(&self) -> bool {
-        if !self.has_loop() {
+        if !self.is_looping() {
             return false;
         }
 
-        if self.position < self.loop_end {
+        if !self.loop_area.is_after_end(self.position) {
             return false;
         }
 
@@ -205,22 +183,16 @@ impl Transport {
     }
 
     pub fn frames_to_loop_end(&self) -> Option<u64> {
-        if !self.has_loop() {
+        if !self.is_looping() {
             return None;
         }
 
-        Some(self.loop_end - self.position)
+        Some(self.loop_area.frames_to_end(self.position))
     }
 
     /// Where the playhead is, in samples.
     pub fn position(&self) -> u64 {
         self.position
-    }
-
-    /// The first sample at or after `beat` at this tempo, the one something
-    /// starting on that beat starts on.
-    pub fn sample_at(&self, beat: f64) -> u64 {
-        (beat * 60.0 / self.bpm * self.sample_rate).ceil() as u64
     }
 
     /// The index of the beat that starts at sample `position`, if one does.
@@ -238,11 +210,21 @@ impl Transport {
         let previous = beats_at(position - 1, self.bpm, self.sample_rate).floor() as u64;
         (beat != previous).then_some(beat)
     }
+
+    pub fn sample_at(&self, beat: f64) -> u64 {
+        sample_at(self.bpm, self.sample_rate, beat)
+    }
 }
 
 /// How many beats `position` samples are at this tempo.
 pub fn beats_at(position: u64, bpm: f64, sample_rate: f64) -> f64 {
     position as f64 / sample_rate * bpm / 60.0
+}
+
+/// The first sample at or after `beat` at this tempo, the one something
+/// starting on that beat starts on.
+pub fn sample_at(bpm: f64, sample_rate: f64, beat: f64) -> u64 {
+    (beat * 60.0 / bpm * sample_rate).ceil() as u64
 }
 
 #[cfg(test)]

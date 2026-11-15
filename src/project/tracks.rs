@@ -86,9 +86,15 @@ impl Project {
     /// Adds a track with a synth while the audio is running. Returns its
     /// index in `tracks`, or `None` when the studio is full.
     pub fn add_synth_track(&mut self) -> Option<usize> {
+        self.add_named_synth_track("Synth")
+    }
+
+    /// Like `add_synth_track`, with the track and its channel named after
+    /// `base` instead of "Synth".
+    pub fn add_named_synth_track(&mut self, base: &str) -> Option<usize> {
         let synth = Synth::default(self.sample_rate);
         let kind = InstrumentKind::Synth(synth.params());
-        let name = self.unique_track_name("Synth");
+        let name = self.unique_track_name(base);
         self.add_track(name, kind, synth)
     }
 
