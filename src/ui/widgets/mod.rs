@@ -5,6 +5,5 @@ pub mod icon_button;
 pub mod knob;
 pub mod list;
 pub mod meter;
-pub mod piano;
 pub mod value;
 pub mod waveform_picker;
