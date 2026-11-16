@@ -8,10 +8,21 @@ use crate::{
     audio::latency,
     project::{InputDevice, Project},
     ui::{
-        editor, keyboard::Keyboard, mixer::MixerPanel, piano_roll::PianoRoll, theme, tracks,
-        tracks::timeline::Timeline, transport,
+        app::actions::Action, editor, keyboard::Keyboard, mixer::MixerPanel, piano_roll::PianoRoll,
+        theme, tracks, tracks::timeline::Timeline, transport, widgets::sidebar::sidebar,
     },
 };
+
+/// Room for the editor column: the amp envelope's four knobs in a row, plus
+/// the padding of the editor frame and the card around them.
+const EDITOR_WIDTH: f32 = 360.0;
+
+/// What fills the main area, right of the editor. Opening a sequence goes a
+/// level deeper, in place of the tracks; closing it comes back up.
+enum View {
+    Tracks,
+    PianoRoll(PianoRoll),
+}
 
 pub struct App {
     project: Project,
@@ -23,8 +34,7 @@ pub struct App {
     /// the list opens, since asking the system every frame would be slow.
     input_devices: Vec<InputDevice>,
     timeline: Timeline,
-    /// The sequence open for editing, shown instead of the instrument editor.
-    piano_roll: Option<PianoRoll>,
+    view: View,
     /// When the latency stats were last printed.
     latency_logged: Instant,
 }
@@ -38,7 +48,7 @@ impl App {
             mixer_panel: MixerPanel::default(),
             input_devices: Vec::new(),
             timeline: Timeline::default(),
-            piano_roll: None,
+            view: View::Tracks,
             latency_logged: Instant::now(),
         }
     }
@@ -58,6 +68,30 @@ impl App {
             ui.add_space(theme::GAP * 2.0);
             transport::show(ui, &self.project);
         });
+    }
+
+    /// The selected track's editor on the left, and the view beside it.
+    fn workspace(&mut self, ui: &mut egui::Ui) -> [Option<Action>; 2] {
+        ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
+        let (side, main) = sidebar(ui, EDITOR_WIDTH, self, Self::editor, Self::view);
+        [side, main]
+    }
+
+    fn editor(&mut self, ui: &mut egui::Ui) -> Option<Action> {
+        let add_clip = editor::show(ui, &mut self.project, self.active, &mut self.input_devices);
+        add_clip.then_some(Action::AddClip)
+    }
+
+    fn view(&mut self, ui: &mut egui::Ui) -> Option<Action> {
+        match &mut self.view {
+            View::Tracks => {
+                tracks::show(ui, &self.project, self.active, &mut self.timeline).map(Action::Track)
+            }
+            View::PianoRoll(roll) => {
+                let open = roll.show(ui, &mut self.project);
+                (!open).then_some(Action::ShowTracks)
+            }
+        }
     }
 }
 
@@ -89,36 +123,13 @@ impl eframe::App for App {
             .resizable(false)
             .show(ui, |ui| self.mixer_panel.show(ui, &mut self.project));
 
-        let mut track_action = None;
-        let mut add_clip = false;
-        egui::CentralPanel::default()
+        let actions = egui::CentralPanel::default()
             .frame(egui::Frame::new().inner_margin(16))
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(theme::GAP, theme::GAP);
-                track_action = tracks::show(ui, &self.project, self.active, &mut self.timeline);
-                ui.add_space(theme::GAP);
-                match &mut self.piano_roll {
-                    Some(roll) => {
-                        if !roll.show(ui, &mut self.project) {
-                            self.piano_roll = None;
-                        }
-                    }
-                    None => {
-                        add_clip = editor::show(
-                            ui,
-                            &mut self.project,
-                            self.active,
-                            &mut self.input_devices,
-                        );
-                    }
-                }
-            });
+            .show(ui, |ui| self.workspace(ui))
+            .inner;
 
-        // handled after drawing, so a file dialog doesn't open mid-frame
-        if add_clip {
-            self.add_clip();
-        }
-        if let Some(action) = track_action {
+        // carried out after drawing, so a file dialog doesn't open mid-frame
+        for action in actions.into_iter().flatten() {
             self.apply(action);
         }
 

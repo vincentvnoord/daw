@@ -5,12 +5,34 @@ use std::{path::PathBuf, sync::atomic::Ordering};
 
 use crate::{
     audio::transport::beats_at,
-    ui::{app::App, piano_roll::PianoRoll, tracks::TrackAction},
+    ui::{
+        app::{App, View},
+        piano_roll::PianoRoll,
+        tracks::TrackAction,
+    },
 };
 
+/// Everything the user can ask for in one frame, from any panel. Each panel
+/// reports in its own terms; this is where they meet.
+pub(super) enum Action {
+    Track(TrackAction),
+    /// Place a WAV file on the selected audio track.
+    AddClip,
+    /// Close the piano roll and go back up to the tracks.
+    ShowTracks,
+}
+
 impl App {
+    pub(super) fn apply(&mut self, action: Action) {
+        match action {
+            Action::Track(action) => self.apply_track(action),
+            Action::AddClip => self.add_clip(),
+            Action::ShowTracks => self.view = View::Tracks,
+        }
+    }
+
     /// Carries out what the user did in the track list or on the timeline.
-    pub(super) fn apply(&mut self, action: TrackAction) {
+    fn apply_track(&mut self, action: TrackAction) {
         match action {
             TrackAction::Select(index) => self.set_active(index),
             TrackAction::AddSynth => {
@@ -50,14 +72,14 @@ impl App {
             }
             TrackAction::OpenSequence { track, sequence } => {
                 self.set_active(track);
-                self.piano_roll = Some(PianoRoll::new(sequence, track));
+                self.view = View::PianoRoll(PianoRoll::new(sequence, track));
             }
         }
     }
 
     /// Asks for a WAV file and places it on the selected audio track, at the
     /// beat the playhead is in.
-    pub(super) fn add_clip(&mut self) {
+    fn add_clip(&mut self) {
         let Some(path) = pick_wav("Add clip") else {
             return;
         };

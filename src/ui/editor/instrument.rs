@@ -9,7 +9,10 @@ use crate::{
     ui::{
         theme,
         widgets::{
-            card::card, envelope_view::EnvelopeView, knob::Knob, value::Unit,
+            card::{card, card_row},
+            envelope_view::EnvelopeView,
+            knob::Knob,
+            value::Unit,
             waveform_picker::WaveformPicker,
         },
     },
@@ -27,23 +30,22 @@ pub(super) fn instrument_controls(ui: &mut egui::Ui, instrument: &InstrumentHand
 }
 
 fn synth_controls(ui: &mut egui::Ui, params: &SynthParams) {
-    card(ui, "Oscillator", |ui| {
-        ui.add(WaveformPicker::new(&params.waveform));
-    });
-
-    card(ui, "Filter", |ui| {
-        ui.add(Knob::new(&params.cutoff, 20.0..=20000.0, "Cutoff", Unit::Hz).logarithmic(true));
+    card_row(ui, "synth_sources", 2, |row| {
+        row.card("Oscillator", |ui| {
+            ui.add(WaveformPicker::new(&params.waveform));
+        });
+        row.card("Filter", |ui| {
+            ui.add(Knob::new(&params.cutoff, 20.0..=20000.0, "Cutoff", Unit::Hz).logarithmic(true));
+        });
     });
 
     card(ui, "Amp envelope", |ui| {
-        ui.set_width(300.0);
         ui.add(EnvelopeView {
             attack: params.attack.get(),
             decay: params.decay.get(),
             sustain: params.sustain.get(),
             release: params.release.get(),
         });
-        ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.add(Knob::new(&params.attack, 0.0..=5.0, "Attack", Unit::Seconds).logarithmic(true));
             ui.add(Knob::new(&params.decay, 0.0..=5.0, "Decay", Unit::Seconds).logarithmic(true));
