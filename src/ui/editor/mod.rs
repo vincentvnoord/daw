@@ -52,14 +52,13 @@ pub fn show(
                 ui.set_width(ui.available_width());
                 header(ui, track, project, &mut choice);
                 ui.separator();
-                let layout = Layout::left_to_right(Align::Min).with_main_wrap(true);
-                ui.with_layout(layout, |ui| match &track.source {
+                match &track.source {
                     TrackSource::Instrument(instrument) => instrument_controls(ui, instrument),
                     TrackSource::Audio(audio) => {
                         input = audio_controls(ui, audio, devices);
                         add_clip = clip_controls(ui, audio);
                     }
-                });
+                }
             });
         });
 
